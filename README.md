@@ -244,7 +244,7 @@ db.alertas.countDocuments({ registrado_em: { $type: "date" } })
 
 Todos os 100000 estão como texto e nenhum está como data.
 
-Causa raiz. O MongoDB tem uma tarefa que roda sozinha a cada 60 segundos e apaga os documentos vencidos de um índice TTL. Para saber se um documento venceu, ela soma a data do campo com o `expireAfterSeconds` e compara com a hora atual. Essa conta só é feita quando o campo é do tipo Date, ou uma lista de Dates. Se o campo for texto, a tarefa simplesmente ignora o documento, sem dar erro nenhum. Mesmo o texto tendo cara de data, para o banco ele é só um texto. Por isso o índice foi criado sem problema e nada foi apagado.
+Causa raiz. O MongoDB passa a cada 60 segundos apagando o que já venceu no índice TTL. Para saber se venceu, ele pega a data do campo, soma os 30 dias e compara com a hora de agora. Só que ele só faz essa conta quando o campo é do tipo Date. Se for texto, ele pula o documento e não avisa nada. O texto até parece uma data, mas para o banco é só texto. Por isso o índice foi criado normal e nada foi apagado.
 
 O comando do índice em si está certo. O que precisa mudar é o jeito de gravar. O índice correto é:
 
@@ -252,7 +252,7 @@ O comando do índice em si está certo. O que precisa mudar é o jeito de gravar
 db.alertas.createIndex({ registrado_em: 1 }, { expireAfterSeconds: 2592000 })
 ```
 
-E a aplicação precisa gravar `registrado_em` como data de verdade, usando `new Date()` ou o tipo de data do driver da linguagem, e não como texto com `toISOString()`:
+E a aplicação tem que gravar o `registrado_em` como data mesmo, com `new Date()`, e não como texto com `toISOString()`, que foi o que o gerador fez:
 
 ```js
 db.alertas.insertOne({ sensor: "S1", nivel: "aviso", registrado_em: new Date() })
@@ -307,11 +307,11 @@ Sem o `_id: 0`, ou seja, `{ container: 1 }`:
 | totalDocsExamined | 0 | 15945 |
 | nReturned | 15945 | 15945 |
 
-Com `_id: 0` a consulta é coberta. Tudo o que ela precisa está dentro do índice: tipo e terminal para filtrar e container para devolver. O banco lê só as chaves do índice e monta a resposta com elas, sem abrir nenhum documento. Por isso aparece PROJECTION_COVERED e totalDocsExamined fica 0.
+Com `_id: 0` a consulta é coberta. Tudo o que ela usa está no índice: tipo e terminal para filtrar e container para mostrar. Então o banco responde só lendo o índice, sem abrir nenhum documento. Por isso aparece PROJECTION_COVERED e o totalDocsExamined fica 0.
 
-Quando eu tiro o `_id: 0`, o MongoDB volta a devolver o `_id`, porque ele vem por padrão em toda consulta. Só que o `_id` não está nesse índice. Então, para cada uma das 15945 chaves, o banco precisa ir no documento buscar o `_id`. Aparece o estágio FETCH e os documentos lidos sobem de 0 para 15945. A consulta deixa de ser coberta só por causa de um campo que eu nem tinha pedido.
+Quando eu tiro o `_id: 0`, o MongoDB volta a mostrar o `_id`, porque ele sempre vem junto se a gente não tira. Só que o `_id` não está nesse índice. Aí, para cada um dos 15945 resultados, o banco tem que abrir o documento para pegar o `_id`. Aparece o FETCH e os documentos lidos vão de 0 para 15945. A consulta deixa de ser coberta por causa de um campo que eu nem pedi.
 
-O tempo ficou igual nos dois (28 ms) porque os dados cabem na memória do meu computador. Numa coleção maior, ou quando os documentos não estão em memória, cada FETCH é uma leitura a mais no disco, e é aí que a consulta coberta faz diferença.
+O tempo deu igual nos dois (28 ms) porque os dados cabem na memória do meu computador. Numa coleção bem maior, cada documento aberto pode ser uma leitura a mais no disco, e aí a consulta coberta faz diferença.
 
 ## Parte B - Aggregation Pipeline
 
@@ -384,7 +384,7 @@ Explain depois do índice:
 | Saída do GROUP (nReturned) | 5 | 5 |
 | executionTimeMillis | 116 | 72 |
 
-Quantos documentos entraram no $group. Na minha versão do MongoDB o $match e o $group rodam juntos dentro do motor de busca, por isso o explain mostra GROUP direto em cima do FETCH. Tudo o que o FETCH lê e passa adiante entra no GROUP, então entraram 49610 documentos. O nReturned 5 é a saída do GROUP, um grupo para cada terminal, antes do $sort e do $limit deixarem só 3.
+Quantos documentos entraram no $group. No começo achei que fosse o nReturned, mas ele deu 5. Na minha versão do MongoDB o $match e o $group rodam juntos, por isso o explain mostra o GROUP logo depois do FETCH. Tudo o que o FETCH leu foi para o GROUP, então entraram 49610 documentos. O 5 é o que saiu do GROUP, um grupo por terminal, antes do $sort e do $limit deixarem só 3.
 
 Para confirmar, contei os documentos que passam no filtro do $match:
 
@@ -394,7 +394,7 @@ db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06
 
 ![B1 contagem](mongo/evidencias/B1f_contagem_match.png)
 
-Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações para descartar a maioria. Com o índice ele vai direto nas chaves de Granel a partir de junho e só lê os documentos que realmente entram no $group. Nenhuma chave foi lida à toa, porque keys e docs examinados são iguais ao resultado do filtro.
+Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações para jogar fora a maioria. Com o índice ele vai direto em Granel a partir de junho e só lê o que vai entrar no $group. Não leu nada à toa, porque as chaves e os documentos lidos deram exatamente o resultado do filtro.
 
 ### B2. Debug Arquitetural
 
@@ -492,7 +492,9 @@ Outra coisa que dá para ver: no pipeline errado o T2 aparecia com mov 20053, o 
 
 d) Impacto da refatoração
 
-Com o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1 }` e só lê as 99559 movimentações de Granel, em vez das 400 mil. Com isso menos documentos passam pelo pipeline e o `$group` monta 5 grupos em vez de 20, o que diminui o uso de memória RAM, porque cada grupo fica guardado na memória até o fim. Também cai o uso de CPU, já que o banco faz menos comparações e somas. E como o `$sort` vem logo depois do `$group`, ele só ordena 5 itens, e o `$limit` corta no lugar certo. No meu teste o tempo ficou parecido, 103 ms contra 111 ms, e isso tem explicação. Ler 1/4 da coleção pelo índice significa ir buscar cada documento num lugar diferente, enquanto o COLLSCAN lê tudo em sequência, que é rápido quando a coleção cabe na memória. Mesmo assim a versão corrigida lê 75% menos documentos, e essa diferença cresce junto com a coleção. A versão errada sempre vai ler tudo, não importa quantas classes existam.
+Colocando o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1 }` e lê só as 99559 movimentações de Granel, e não as 400 mil. Menos documentos passando pelo pipeline e 5 grupos em vez de 20 significa menos memória RAM, porque os grupos ficam guardados na memória até o fim. Também gasta menos CPU, porque são menos contas e comparações. E o `$sort` só precisa ordenar 5 itens antes do `$limit`.
+
+Uma coisa que me surpreendeu: o tempo ficou parecido, 103 ms no errado e 111 ms no corrigido. Pelo que entendi, ler 1/4 da coleção pelo índice é ir buscar documento por documento em lugares diferentes, enquanto o COLLSCAN lê tudo em sequência, e isso é rápido quando tudo cabe na memória. Mesmo assim o corrigido lê 75% menos documentos, e essa diferença só aumenta se a coleção crescer. O errado sempre vai ler tudo.
 
 ### Auditoria de índices
 
@@ -554,7 +556,7 @@ ORDER BY empresa, data
 | Empresa 23 | K13 | T1 | 2026-10-27 |
 | Empresa 9 | K30 | T4 | 2026-10-10 |
 
-Por que a direção é de fora para dentro, chegando na sancionada. No meu grafo a seta `(a)-[:SOCIA_DE]->(b)` significa que a é sócia de b, ou seja, a é dona de uma parte de b. Numa investigação de sanção o que interessa é quem está por trás da empresa sancionada: os sócios dela, os sócios dos sócios e assim por diante. São essas empresas que podem estar usando outras empresas para continuar operando. Então o caminho tem que seguir as setas até chegar na E2.
+Por que a seta vai chegando na sancionada. No meu grafo `(a)-[:SOCIA_DE]->(b)` quer dizer que a é sócia de b, ou seja, a é dona de um pedaço de b. Numa investigação de sanção o que importa é quem está por trás da empresa sancionada: os sócios dela, os sócios dos sócios e assim por diante. Então o caminho tem que seguir as setas até chegar na E2.
 
 Para comprovar, rodei o caminho no sentido contrário, saindo da E2:
 
@@ -567,14 +569,9 @@ RETURN count(DISTINCT x) AS empresas_alcancadas
 
 Deu 0. A E2 não tem nenhuma seta saindo, então nessa direção não se chega em ninguém.
 
-Também não usei o caminho sem direção. Sem direção a busca mistura quem é dono da E2 com empresas que só têm um sócio em comum com ela, por exemplo uma empresa que recebe investimento da E20. Isso traz empresas sem relação de controle com a sancionada e aumenta muito o número de caminhos.
+Também não usei sem direção, porque aí a busca mistura quem é dono da E2 com empresas que só têm um sócio em comum com ela, por exemplo uma empresa onde a E20 investiu. Essas empresas não controlam a sancionada.
 
-Outros cuidados da consulta:
-
-- O limite `*1..3` segue o pedido de até 3 níveis e impede que a busca ande pelo grafo inteiro.
-- O `WITH DISTINCT x, s` tira as repetições antes da segunda parte. Uma mesma empresa pode chegar na E2 por mais de um caminho, e sem isso a comparação de contêineres seria feita várias vezes para a mesma empresa.
-- O `RETURN DISTINCT` garante que não vem linha repetida no resultado.
-- O `x <> s` impede que a própria sancionada apareça como investigada.
+O `*1..3` é o limite de até 3 níveis que a questão pede. O `WITH DISTINCT` e o `RETURN DISTINCT` tiram as repetições, porque a mesma empresa pode chegar na E2 por mais de um caminho. E o `x <> s` garante que a própria E2 não aparece na lista.
 
 ### C3. Debug Cypher
 
@@ -598,7 +595,7 @@ Procurando E1 e E2 aparecem as originais, com nome, e cópias sem nome e sem a i
 
 ![C3 i duplicadas](neo4j/evidencias/C3i_c_duplicadas.png)
 
-Causa raiz. O `CREATE` sempre cria tudo o que está escrito no padrão, nós e relacionamento. Escrever `(a:Empresa {cnpj:'E1'})` dentro de um `CREATE` não procura a empresa que já existe, cria uma nova com esse cnpj. A ligação foi feita entre duas empresas novas e vazias, e as empresas de verdade continuaram sem a ligação. Cada vez que o comando roda, cria mais duas cópias.
+Causa raiz. O `CREATE` cria tudo o que está escrito nele, os nós e a ligação. Escrever `(a:Empresa {cnpj:'E1'})` dentro do `CREATE` não procura a empresa que já existe, cria outra com esse cnpj. A ligação ficou entre duas empresas novas e vazias, e as empresas de verdade continuaram sem ligação. Cada vez que roda, cria mais duas cópias.
 
 Limpeza das cópias, conforme a prova pede antes de rodar a correção:
 
@@ -627,7 +624,7 @@ Evidência. Criou só 1 relacionamento, entre Empresa 1 e Empresa 2, e o total v
 
 ![C3 i depois](neo4j/evidencias/C3i_f_contagem_depois.png)
 
-O Neo4j mostrou um aviso de "produto cartesiano" porque o `MATCH` tem dois padrões separados. Aqui não tem problema, já que cada um encontra uma empresa só, 1 x 1 = 1 combinação. Para evitar cópias de vez, o ideal seria também criar uma regra de cnpj único com `CREATE CONSTRAINT FOR (e:Empresa) REQUIRE e.cnpj IS UNIQUE`. Aí um `CREATE` errado daria erro em vez de duplicar.
+O Neo4j mostrou um aviso de "produto cartesiano" porque o `MATCH` tem duas partes separadas. Aqui não tem problema, porque cada parte acha uma empresa só. Para nunca mais duplicar, daria para criar uma regra de cnpj único com `CREATE CONSTRAINT FOR (e:Empresa) REQUIRE e.cnpj IS UNIQUE`, e aí um `CREATE` errado daria erro.
 
 Essa nova ligação E1 para E2 não muda o resultado da C2. A Empresa 1 já estava na lista, chegando na E2 por outro caminho, e nenhuma empresa nova passa a ficar a 3 níveis ou menos da E2.
 
@@ -645,13 +642,7 @@ Sintoma. Rodei com `LIMIT 20`, como a prova orienta, para não travar o Neo4j:
 
 Em só 20 linhas já tem empresa repetida, como Empresa 8, Empresa 19 e Empresa 20, e aparece até a Empresa 2, que é a própria sancionada.
 
-Causa raiz. São três problemas juntos:
-
-- `*` sem limite. O Neo4j tenta seguir caminhos de qualquer tamanho.
-- Sem direção, com `-` no lugar de `->`. Cada ligação pode ser percorrida para os dois lados, então ele anda pelo grafo inteiro, de sócio para investida e de volta.
-- Sem `DISTINCT`. O Neo4j devolve uma linha para cada caminho encontrado, não para cada empresa. A mesma empresa aparece uma vez para cada caminho diferente que chega nela, e caminhos que dão a volta trazem a própria E2.
-
-Com 30 empresas e 45 ligações, o número de caminhos possíveis cresce muito rápido. Por isso, sem o LIMIT, a consulta pode consumir muita memória e travar.
+Causa raiz. Tem três coisas erradas juntas. O `*` não tem limite, então o Neo4j segue caminhos de qualquer tamanho. Não tem direção, então cada ligação pode ser andada para os dois lados e a busca passeia pelo grafo inteiro, indo e voltando. E não tem `DISTINCT`, então vem uma linha para cada caminho e não para cada empresa. A mesma empresa aparece uma vez para cada caminho que chega nela, e os caminhos que dão a volta trazem até a própria E2. Com 45 ligações o número de caminhos cresce muito rápido, por isso sem o LIMIT a consulta pode travar o Neo4j.
 
 Código corrigido:
 
@@ -699,7 +690,7 @@ Sintoma. Os números vêm maiores do que deveriam.
 
 ![C3 iv antes](neo4j/evidencias/C3iv_a_antes.png)
 
-Causa raiz. O `MATCH` devolve uma linha para cada passagem, ou seja, para cada relacionamento PASSOU_POR, e o `count(k)` conta linhas. Cada contêiner tem 2 passagens, e às vezes as duas foram no mesmo terminal, em datas diferentes. Nesse caso o mesmo contêiner aparece em 2 linhas daquele terminal e é contado 2 vezes. A pergunta é quantos contêineres diferentes, e não quantas passagens.
+Causa raiz. O `MATCH` traz uma linha para cada passagem, e o `count(k)` conta linhas. Cada contêiner passou 2 vezes por terminais, e às vezes as duas foram no mesmo terminal em dias diferentes. Aí o mesmo contêiner é contado 2 vezes naquele terminal. Só que a pergunta é quantos contêineres diferentes, e não quantas passagens.
 
 Código corrigido:
 
