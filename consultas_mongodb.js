@@ -79,3 +79,38 @@ db.alertas.countDocuments({ registrado_em: { $type: "date" } });   // 0
 // Como a aplicação deve gravar: data de verdade (Date), não texto
 db.alertas.insertOne({ sensor: "TESTE", nivel: "info", registrado_em: new Date(Date.now() - 40*24*60*60*1000) });
 db.alertas.countDocuments({ sensor: "TESTE" }); // 1 logo depois, 0 depois de ~2 minutos
+
+// ---------- A4. Consulta coberta ----------
+db.movimentacoes.createIndex({ tipo: 1, terminal: 1, container: 1 });
+// Coberta: PROJECTION_COVERED, totalDocsExamined 0
+resumo(db.movimentacoes.find({ tipo: "inspecao", terminal: "T4" }, { _id: 0, container: 1 }).explain("executionStats"));
+// Sem _id: 0 o _id volta na resposta, não está no índice -> FETCH
+resumo(db.movimentacoes.find({ tipo: "inspecao", terminal: "T4" }, { container: 1 }).explain("executionStats"));
+
+// ================= PARTE B =================
+// Função auxiliar para explain de aggregate
+function resumoAgg(ex) {
+  const c = ex.stages ? ex.stages[0].$cursor : ex;
+  const s = c.executionStats;
+  let p = c.queryPlanner.winningPlan;
+  p = p.queryPlan || p;
+  const st = [];
+  while (p) { st.push(p.stage); p = p.inputStage || (p.inputStages && p.inputStages[0]); }
+  printjson({ estagios: st.join(" <- "), nReturned: s.nReturned, totalDocsExamined: s.totalDocsExamined,
+              totalKeysExamined: s.totalKeysExamined, executionTimeMillis: s.executionTimeMillis });
+}
+
+// ---------- B1. Relatório gerencial ----------
+const pipelineB1 = [
+  { $match: { classe: "Granel", ts: { $gte: ISODate("2026-06-01") } } },
+  { $group: { _id: "$terminal", total_movimentacoes: { $sum: 1 }, peso_total: { $sum: "$peso_kg" },
+              peso_medio: { $avg: "$peso_kg" }, maior_peso: { $max: "$peso_kg" } } },
+  { $sort: { peso_total: -1 } },
+  { $limit: 3 },
+  { $project: { _id: 0, terminal: "$_id", total_movimentacoes: 1, peso_total: 1, peso_medio: 1, maior_peso: 1 } }
+];
+db.movimentacoes.aggregate(pipelineB1);
+resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineB1)); // antes do índice
+db.movimentacoes.createIndex({ classe: 1, ts: 1 });
+resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineB1)); // depois do índice
+db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06-01") } }); // 49610 entram no $group

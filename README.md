@@ -261,6 +261,129 @@ Logo depois de gravar a contagem era 1. Uns dois minutos depois rodei de novo e 
 
 ![A3 teste depois](evidencias/A3i_teste_depois.png)
 
+### A4. Consulta coberta
+
+Consulta da questão:
+
+```js
+db.movimentacoes.find(
+  { tipo: "inspecao", terminal: "T4" },
+  { _id: 0, container: 1 }
+)
+```
+
+Criei um índice com os dois campos do filtro e o campo que a consulta devolve:
+
+```js
+db.movimentacoes.createIndex({ tipo: 1, terminal: 1, container: 1 })
+```
+
+![A4 indice](evidencias/A4a_indice.png)
+
+Com `_id: 0` na projeção:
+
+![A4 coberta](evidencias/A4b_coberta.png)
+
+Sem o `_id: 0`, ou seja, `{ container: 1 }`:
+
+![A4 sem _id 0](evidencias/A4c_sem_id0.png)
+
+| | com _id: 0 | sem _id: 0 |
+|---|---|---|
+| Estágios | PROJECTION_COVERED, IXSCAN | PROJECTION_SIMPLE, FETCH, IXSCAN |
+| totalKeysExamined | 15945 | 15945 |
+| totalDocsExamined | 0 | 15945 |
+| nReturned | 15945 | 15945 |
+
+Com `_id: 0` a consulta é coberta. Tudo o que ela precisa está dentro do índice: tipo e terminal para filtrar e container para devolver. O banco lê só as chaves do índice e monta a resposta com elas, sem abrir nenhum documento. Por isso aparece PROJECTION_COVERED e totalDocsExamined fica 0.
+
+Quando eu tiro o `_id: 0`, o MongoDB volta a devolver o `_id`, porque ele vem por padrão em toda consulta. Só que o `_id` não está nesse índice. Então, para cada uma das 15945 chaves, o banco precisa ir no documento buscar o `_id`. Aparece o estágio FETCH e os documentos lidos sobem de 0 para 15945. A consulta deixa de ser coberta só por causa de um campo que eu nem tinha pedido.
+
+O tempo ficou igual nos dois (28 ms) porque os dados cabem na memória do meu computador. Numa coleção maior, ou quando os documentos não estão em memória, cada FETCH é uma leitura a mais no disco, e é aí que a consulta coberta faz diferença.
+
+## Parte B - Aggregation Pipeline
+
+Para o explain do aggregate criei a função `resumoAgg`, parecida com a `resumo` da Parte A. O código está no consultas_mongodb.js.
+
+### B1. Relatório gerencial
+
+Pipeline, usando só os estágios vistos nos Encontros 7 e 8:
+
+```js
+const pipelineB1 = [
+  // 1. Filtra primeiro, para o índice poder ser usado e menos documentos seguirem
+  { $match: { classe: "Granel", ts: { $gte: ISODate("2026-06-01") } } },
+  // 2. Agrupa por terminal e calcula os totais
+  { $group: {
+      _id: "$terminal",
+      total_movimentacoes: { $sum: 1 },
+      peso_total: { $sum: "$peso_kg" },
+      peso_medio: { $avg: "$peso_kg" },
+      maior_peso: { $max: "$peso_kg" }
+  } },
+  // 3. Ordena pelo peso total e fica com os 3 maiores
+  { $sort: { peso_total: -1 } },
+  { $limit: 3 },
+  // 4. Troca o _id pelo campo terminal
+  { $project: { _id: 0, terminal: "$_id", total_movimentacoes: 1, peso_total: 1, peso_medio: 1, maior_peso: 1 } }
+]
+db.movimentacoes.aggregate(pipelineB1)
+```
+
+![B1 pipeline](evidencias/B1a_pipeline.png)
+
+Resultado:
+
+![B1 resultado](evidencias/B1b_resultado.png)
+
+| terminal | total_movimentacoes | peso_total | peso_medio | maior_peso |
+|---|---|---|---|---|
+| T5 | 10001 | 160953101 | 16093,70 | 30995 |
+| T3 | 10058 | 159915134 | 15899,30 | 30999 |
+| T1 | 9882 | 159030430 | 16092,94 | 30995 |
+
+O $sort e o $limit vêm depois do $group de propósito. Só dá para saber quais são os 3 maiores depois de somar o peso de todos os terminais.
+
+Explain antes de criar o índice:
+
+```js
+db.movimentacoes.explain("executionStats").aggregate(pipelineB1)
+```
+
+![B1 sem indice](evidencias/B1c_explain_sem_indice.png)
+
+Criei um índice com os dois campos do $match. Classe vem primeiro porque é igualdade e a data depois porque é faixa:
+
+```js
+db.movimentacoes.createIndex({ classe: 1, ts: 1 })
+```
+
+![B1 indice](evidencias/B1d_indice.png)
+
+Explain depois do índice:
+
+![B1 com indice](evidencias/B1e_explain_com_indice.png)
+
+| | sem índice | com índice { classe: 1, ts: 1 } |
+|---|---|---|
+| Estágios | GROUP, COLLSCAN | GROUP, FETCH, IXSCAN |
+| totalKeysExamined | 0 | 49610 |
+| totalDocsExamined | 400000 | 49610 |
+| Saída do GROUP (nReturned) | 5 | 5 |
+| executionTimeMillis | 116 | 72 |
+
+Quantos documentos entraram no $group. Na minha versão do MongoDB o $match e o $group rodam juntos dentro do motor de busca, por isso o explain mostra GROUP direto em cima do FETCH. Tudo o que o FETCH lê e passa adiante entra no GROUP, então entraram 49610 documentos. O nReturned 5 é a saída do GROUP, um grupo para cada terminal, antes do $sort e do $limit deixarem só 3.
+
+Para confirmar, contei os documentos que passam no filtro do $match:
+
+```js
+db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06-01") } })
+```
+
+![B1 contagem](evidencias/B1f_contagem_match.png)
+
+Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações para descartar a maioria. Com o índice ele vai direto nas chaves de Granel a partir de junho e só lê os documentos que realmente entram no $group. Nenhuma chave foi lida à toa, porque keys e docs examinados são iguais ao resultado do filtro.
+
 ## Diário de bordo
 
 - O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
@@ -272,3 +395,6 @@ Logo depois de gravar a contagem era 1. Uns dois minutos depois rodei de novo e 
 - A2: eu tinha previsto centenas de chaves e documentos lidos. Foram 102 chaves e 36 documentos, porque a busca para assim que acha os 10 mais perto, e eles estavam a poucos metros do ponto.
 - A3: minha hipótese do pré-registro, de que o campo estava gravado como texto, se confirmou. O primeiro sinal foi o findOne mostrar a data entre aspas.
 - A3: o alerta de teste não some na hora. A tarefa do TTL roda a cada 60 segundos, então esperei uns dois minutos antes de contar de novo.
+- A4: a previsão de uns 16 mil registros bateu, foram 15945. O estágio sem o `_id: 0` apareceu como PROJECTION_SIMPLE em vez de só PROJECTION, mas o importante, o FETCH, apareceu como eu esperava.
+
+- B1: eu tinha previsto uns 49 a 50 mil documentos entrando no $group, e foram 49610. No começo estranhei o nReturned 5 no explain, achei que fosse o número de documentos que entraram. Depois entendi que, nessa versão do MongoDB, o $group roda junto com a busca e o nReturned é a saída do grupo, um por terminal. Confirmei a entrada contando os documentos do $match.
