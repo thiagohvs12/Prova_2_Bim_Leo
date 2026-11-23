@@ -91,6 +91,97 @@ O tempo do b) e do c) ficou parecido (13 ms e 12 ms) porque 9.741 chaves ainda �
 
 Índice que ficou na coleção ao final da A1: `{ terminal: 1, classe: 1, peso_kg: -1, ts: 1 }`.
 
+### A2. Incidente no pátio
+
+Ponto do incidente informado no formato do Google Maps: `-25.4580, -48.4900` (latitude, longitude).
+
+Etapa 1 - consulta antes de existir índice geoespacial:
+
+```js
+db.movimentacoes.find({
+  posicao: { $near: {
+    $geometry: { type: "Point", coordinates: [-48.4900, -25.4580] },
+    $maxDistance: 300
+  } }
+}).limit(10)
+```
+
+![A2 erro](evidencias/A2a_erro_sem_indice.png)
+
+O MongoDB recusa a consulta com `NoQueryExecutionPlans: unable to find index for $geoNear query`. Diferente de um filtro comum, que sempre pode cair num COLLSCAN, o `$near` precisa ordenar por distância, e o banco só sabe fazer isso percorrendo um índice geoespacial. Sem ele não existe plano possível.
+
+Etapa 2 - criação do índice:
+
+```js
+db.movimentacoes.createIndex({ posicao: "2dsphere" })
+```
+
+![A2 indice](evidencias/A2b_indice_2dsphere.png)
+
+Usei `2dsphere` porque o campo `posicao` está em GeoJSON (`{ type: "Point", coordinates: [...] }`) e as distâncias precisam ser calculadas sobre a superfície da Terra, em metros. O índice `2d` é para coordenadas num plano e não trabalha com GeoJSON nem com metros.
+
+Etapa 3 - a armadilha das coordenadas do Google Maps. Copiando o ponto na ordem em que o Google Maps mostra (latitude, longitude):
+
+```js
+db.movimentacoes.find({
+  posicao: { $near: {
+    $geometry: { type: "Point", coordinates: [-25.4580, -48.4900] },
+    $maxDistance: 300
+  } }
+}, { _id: 0, container: 1, posicao: 1 }).limit(10).toArray()
+```
+
+![A2 ordem errada](evidencias/A2c_ordem_google_maps.png)
+
+O resultado é vazio e não dá nenhum erro, o que é o mais perigoso. O GeoJSON define a ordem `[longitude, latitude]`. Com a ordem invertida, o MongoDB entende longitude -25.458 e latitude -48.49, que é um ponto válido, só que no meio do Atlântico Sul, a milhares de quilômetros de Paranaguá. Como não há nada num raio de 300 m de lá, a consulta volta vazia em silêncio.
+
+Etapa 4 - consulta correta, com `[longitude, latitude]`:
+
+```js
+db.movimentacoes.find({
+  posicao: { $near: {
+    $geometry: { type: "Point", coordinates: [-48.4900, -25.4580] },
+    $maxDistance: 300
+  } }
+}, { _id: 0, container: 1, posicao: 1 }).limit(10)
+```
+
+![A2 resultado 1](evidencias/A2d_resultado_parte1.png)
+![A2 resultado 2](evidencias/A2d_resultado_parte2.png)
+
+Retornou os 10 registros mais próximos, já em ordem crescente de distância, sem precisar de `.sort()`: CTN14966, CTN22280, CTN01260, CTN29540, CTN17399, CTN56094, CTN46454, CTN48264, CTN14920 e CTN12506. O `$maxDistance: 300` é em metros porque o ponto foi passado em GeoJSON.
+
+Etapa 5 - explain:
+
+```js
+db.movimentacoes.find({
+  posicao: { $near: {
+    $geometry: { type: "Point", coordinates: [-48.4900, -25.4580] },
+    $maxDistance: 300
+  } }
+}).limit(10).explain("executionStats")
+```
+
+![A2 explain](evidencias/A2e_explain.png)
+
+| Métrica | Valor |
+|---|---|
+| Plano | LIMIT <- GEO_NEAR_2DSPHERE <- FETCH <- IXSCAN |
+| nReturned | 10 |
+| totalKeysExamined | 102 |
+| totalDocsExamined | 36 |
+| executionTimeMillis | 1 |
+| Índice | `{ posicao: "2dsphere" }` |
+
+Como cada etapa funciona, de baixo para cima:
+
+- IXSCAN: o índice 2dsphere não guarda as coordenadas diretamente. Ele divide a esfera em células (geometria S2) e guarda, para cada ponto, o código da célula em que ele cai. Para buscar perto do incidente, o banco calcula quais células cobrem um anel em volta do ponto e varre no índice só as faixas de chave dessas células. Foram 102 chaves.
+- FETCH: as células são uma aproximação, um contêiner na mesma célula pode estar fora do raio. Então o banco busca os documentos candidatos (36) para ler a coordenada exata.
+- GEO_NEAR_2DSPHERE: calcula a distância real de cada candidato até o ponto, descarta os que passam de 300 m e devolve em ordem de distância. Ele trabalha em anéis que vão crescendo a partir do centro: primeiro resolve o anel mais próximo, devolve o que está ali em ordem, e só abre o próximo anel se ainda precisar de resultados. Por isso nunca precisa ordenar a coleção toda.
+- LIMIT: corta em 10. Como o GEO_NEAR já entrega os resultados em ordem, assim que chegam 10 a busca para de abrir anéis novos.
+
+O resultado: 36 documentos lidos para responder, contra 400 mil que seriam necessários se não houvesse índice e fosse possível calcular distância documento por documento.
+
 ## Diário de bordo
 
 - Primeira tentativa de rodar o gerador falhou porque o contêiner mongo-lab estava parado. Resolvido com `docker start mongo-lab`.
@@ -98,3 +189,5 @@ O tempo do b) e do c) ficou parecido (13 ms e 12 ms) porque 9.741 chaves ainda �
 - O Neo4j do contêiner neo4j-lab ainda tinha os nós do exercício de aula (Antena, CoreRouter, Switch). Apaguei tudo com `MATCH (n) DETACH DELETE n` antes de carregar o grafo da prova e conferi 5 Terminal, 30 Empresa e 90 Container.
 - A1: na primeira rodada esqueci de registrar o explain do item b). Removi o índice ESR, recriei o índice do item b), rodei o explain, depois removi e recriei o ESR.
 - A1 b): previ que seriam examinados uns 9,7 mil documentos, mas foram só 20. As keys bateram (9.741). O que eu não considerei é que o `peso_kg` está no índice, então o SORT ordenou as chaves e o FETCH só aconteceu depois, para os 20 primeiros.
+- A2: na primeira execução com as coordenadas na ordem do Google Maps, o mongosh não mostrou nada na tela, o que parecia que o comando não tinha rodado. Repeti com `.toArray()` para aparecer o `[]` explícito.
+- A2: previ "centenas" de chaves e documentos examinados. Foram 102 chaves e 36 documentos, menos do que eu esperava, porque a busca em anéis para assim que fecha os 10 mais próximos e, com essa densidade de pontos, os 10 já estavam a poucos metros do incidente.

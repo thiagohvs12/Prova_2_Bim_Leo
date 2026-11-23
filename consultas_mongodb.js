@@ -44,3 +44,27 @@ resumo(consultaA1().explain("executionStats"));
 db.movimentacoes.dropIndex({ terminal: 1, classe: 1, ts: 1, peso_kg: -1 });
 db.movimentacoes.createIndex({ terminal: 1, classe: 1, peso_kg: -1, ts: 1 });
 resumo(consultaA1().explain("executionStats"));
+
+// ---------- A2. Incidente no pátio ----------
+// Google Maps mostra "lat, lon" = -25.4580, -48.4900
+// GeoJSON exige [longitude, latitude] = [-48.4900, -25.4580]
+const pontoIncidente = { type: "Point", coordinates: [-48.4900, -25.4580] };
+
+// Antes do índice: erro "unable to find index for $geoNear query"
+db.movimentacoes.find({ posicao: { $near: { $geometry: pontoIncidente, $maxDistance: 300 } } }).limit(10);
+
+db.movimentacoes.createIndex({ posicao: "2dsphere" });
+
+// Armadilha: ordem do Google Maps (lat, lon) -> resultado vazio
+db.movimentacoes.find(
+  { posicao: { $near: { $geometry: { type: "Point", coordinates: [-25.4580, -48.4900] }, $maxDistance: 300 } } },
+  { _id: 0, container: 1, posicao: 1 }
+).limit(10).toArray();
+
+// Correto: 10 mais próximos em até 300 m, já ordenados por distância
+db.movimentacoes.find(
+  { posicao: { $near: { $geometry: pontoIncidente, $maxDistance: 300 } } },
+  { _id: 0, container: 1, posicao: 1 }
+).limit(10);
+
+resumo(db.movimentacoes.find({ posicao: { $near: { $geometry: pontoIncidente, $maxDistance: 300 } } }).limit(10).explain("executionStats"));
