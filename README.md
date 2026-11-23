@@ -502,33 +502,17 @@ O índice do item b da A1 (`terminal, classe, ts, peso_kg`) foi apagado, porque 
 
 ### C1. Modelagem
 
-Desenhei os diagramas em Mermaid. Os arquivos-fonte estão na pasta diagramas (C1_modelo.mmd e C1_subgrafo_E2.mmd) e as imagens na pasta evidencias. Na mesma pasta também deixei o arquivo C1_diagramas.drawio, com os dois diagramas para abrir no draw.io.
-
 Modelo do grafo:
 
 ![C1 modelo](evidencias/C1_modelo.png)
 
-Como ler:
-
-- Caixa é um nó. O nome com dois pontos é o rótulo e embaixo vêm as propriedades.
-- Seta é um relacionamento, sempre com direção. O texto da seta é o tipo e, entre chaves, as propriedades dele.
-- `(a)-[:SOCIA_DE {pct}]->(b)` quer dizer que a empresa a é sócia da empresa b, com pct por cento de participação.
-- `(k)-[:PERTENCE_A]->(e)` quer dizer que o contêiner k é da empresa e.
-- `(k)-[:PASSOU_POR {data}]->(t)` quer dizer que o contêiner k passou pelo terminal t naquela data.
-- `(a)-[:EMPILHADO_SOBRE]->(b)` quer dizer que o contêiner a está em cima do contêiner b.
-
-Não tem chave estrangeira nem tabela no meio. A participação societária e a data da passagem ficam guardadas no próprio relacionamento, que é como o grafo trata a ligação entre duas coisas.
+Cada caixa é um tipo de nó, com as suas propriedades. Cada seta é um relacionamento, com a direção e as propriedades dele. Uma empresa pode ser sócia de outra empresa, o contêiner pertence a uma empresa, passa por terminais em uma data e pode estar empilhado em cima de outro contêiner. Não tem chave estrangeira nem tabela no meio. A participação societária e a data da passagem ficam guardadas no próprio relacionamento.
 
 Exemplo real do meu grafo, a empresa sancionada E2 e os sócios diretos dela:
 
 ![C1 subgrafo E2](evidencias/C1_subgrafo_E2.png)
 
-Consulta usada para tirar esses dados do banco:
-
-```cypher
-MATCH (s:Empresa {sancionada: true})-[r:SOCIA_DE]-(socio:Empresa)
-RETURN socio.nome AS socio, r.pct AS pct, startNode(r) = socio AS socio_aponta_para_E2
-```
+Esses dados saíram do meu banco no Neo4j:
 
 ![C1 socios](evidencias/C1_socios_E2.png)
 
