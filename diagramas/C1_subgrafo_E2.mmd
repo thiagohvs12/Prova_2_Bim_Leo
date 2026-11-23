@@ -1,0 +1,14 @@
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "basis"}} }%%
+flowchart LR
+    E0["<b>:Empresa</b><br/>cnpj: E0<br/>nome: Empresa 0"]
+    E9["<b>:Empresa</b><br/>cnpj: E9<br/>nome: Empresa 9"]
+    E13["<b>:Empresa</b><br/>cnpj: E13<br/>nome: Empresa 13"]
+    E20["<b>:Empresa</b><br/>cnpj: E20<br/>nome: Empresa 20"]
+    E2["<b>:Empresa</b><br/>cnpj: E2<br/>nome: Empresa 2<br/>sancionada: true"]
+
+    E0 -- "SOCIA_DE {pct: 44}" --> E2
+    E9 -- "SOCIA_DE {pct: 26}" --> E2
+    E13 -- "SOCIA_DE {pct: 75}" --> E2
+    E20 -- "SOCIA_DE {pct: 93}" --> E2
+
+    style E2 fill:#f8d7da,stroke:#cc0000

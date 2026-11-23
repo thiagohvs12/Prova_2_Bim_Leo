@@ -1,0 +1,23 @@
+digraph G {
+  rankdir=LR; nodesep=1.0; ranksep=1.8; pad=0.4;
+  node [shape=box, style="rounded,filled", fillcolor="#eef0ff", color="#6c5ce7", fontname="Helvetica", fontsize=14, margin="0.25,0.15"];
+  edge [fontname="Helvetica", fontsize=13, color="#333333"];
+  C [label=<<b>:Container</b><br/>id: String<br/>classe: String>];
+  E [label=<<b>:Empresa</b><br/>cnpj: String<br/>nome: String<br/>sancionada: Boolean>];
+  T [label=<<b>:Terminal</b><br/>nome: String>];
+  C -> E [label="  PERTENCE_A  "];
+  C -> T [label="  PASSOU_POR\n  {data: String}  "];
+  E:n -> E:ne [label="  SOCIA_DE\n  {pct: Integer}  "];
+  C:s -> C:sw [label="  EMPILHADO_SOBRE  "];
+  legenda [shape=plaintext, style="", label=<
+    <table border="1" cellborder="0" cellspacing="4" color="#999999">
+    <tr><td align="left"><b>Legenda</b></td></tr>
+    <tr><td align="left">Caixa = nó (:Rótulo e propriedades)</td></tr>
+    <tr><td align="left">Seta = relacionamento com direção</td></tr>
+    <tr><td align="left">{ } = propriedade do relacionamento</td></tr>
+    <tr><td align="left">(a)-[:SOCIA_DE]-&gt;(b): a é sócia de b</td></tr>
+    <tr><td align="left">(a)-[:EMPILHADO_SOBRE]-&gt;(b): a está em cima de b</td></tr>
+    </table>>];
+  {rank=same; E; T;}
+  T -> legenda [style=invis];
+}

@@ -502,21 +502,11 @@ O índice do item b da A1 (`terminal, classe, ts, peso_kg`) foi apagado, porque 
 
 ### C1. Modelagem
 
-Fiz o diagrama em Mermaid, que o GitHub mostra como desenho direto nesta página.
+Desenhei os diagramas em Mermaid. Os arquivos-fonte estão na pasta diagramas (C1_modelo.mmd e C1_subgrafo_E2.mmd) e as imagens na pasta evidencias. Na mesma pasta também deixei o arquivo C1_diagramas.drawio, com os dois diagramas para abrir no draw.io.
 
 Modelo do grafo:
 
-```mermaid
-flowchart LR
-    E["<b>:Empresa</b><br/>cnpj: String<br/>nome: String<br/>sancionada: Boolean"]
-    C["<b>:Container</b><br/>id: String<br/>classe: String"]
-    T["<b>:Terminal</b><br/>nome: String"]
-
-    E -- "SOCIA_DE {pct: Integer}" --> E
-    C -- "PERTENCE_A" --> E
-    C -- "PASSOU_POR {data: String}" --> T
-    C -- "EMPILHADO_SOBRE" --> C
-```
+![C1 modelo](evidencias/C1_modelo.png)
 
 Como ler:
 
@@ -531,21 +521,7 @@ Não tem chave estrangeira nem tabela no meio. A participação societária e a 
 
 Exemplo real do meu grafo, a empresa sancionada E2 e os sócios diretos dela:
 
-```mermaid
-flowchart LR
-    E0["Empresa 0<br/>cnpj: E0"]
-    E9["Empresa 9<br/>cnpj: E9"]
-    E13["Empresa 13<br/>cnpj: E13"]
-    E20["Empresa 20<br/>cnpj: E20"]
-    E2["<b>Empresa 2</b><br/>cnpj: E2<br/>sancionada: true"]
-
-    E0 -- "SOCIA_DE {pct: 44}" --> E2
-    E9 -- "SOCIA_DE {pct: 26}" --> E2
-    E13 -- "SOCIA_DE {pct: 75}" --> E2
-    E20 -- "SOCIA_DE {pct: 93}" --> E2
-
-    style E2 fill:#f8d7da,stroke:#c00
-```
+![C1 subgrafo E2](evidencias/C1_subgrafo_E2.png)
 
 Consulta usada para tirar esses dados do banco:
 

@@ -1,0 +1,14 @@
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "basis"}} }%%
+flowchart LR
+    C["<b>:Container</b><br/>id: String<br/>classe: String"]
+    E["<b>:Empresa</b><br/>cnpj: String<br/>nome: String<br/>sancionada: Boolean"]
+    T["<b>:Terminal</b><br/>nome: String"]
+
+    C -- "PERTENCE_A" --> E
+    C -- "PASSOU_POR<br/>{data: String}" --> T
+    E -- "SOCIA_DE<br/>{pct: Integer}" --> E
+    C -- "EMPILHADO_SOBRE" --> C
+
+    L["<b>Legenda</b><br/>Caixa = nó, com :Rótulo e propriedades<br/>Seta = relacionamento com direção<br/>{ } = propriedade do relacionamento<br/>(a)-[:SOCIA_DE]->(b) = a é sócia de b<br/>(a)-[:EMPILHADO_SOBRE]->(b) = a está em cima de b"]
+    T ~~~ L
+    style L fill:#ffffff,stroke:#999999,stroke-dasharray: 4 4,text-align:left

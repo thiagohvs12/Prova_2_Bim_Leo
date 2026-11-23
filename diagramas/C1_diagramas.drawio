@@ -1,0 +1,81 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="modelo" name="Modelo do grafo">
+    <mxGraphModel dx="1200" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="C" value="&lt;b&gt;:Container&lt;/b&gt;&lt;br&gt;id: String&lt;br&gt;classe: String" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="220" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="E" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: String&lt;br&gt;nome: String&lt;br&gt;sancionada: Boolean" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="480" y="100" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="T" value="&lt;b&gt;:Terminal&lt;/b&gt;&lt;br&gt;nome: String" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="500" y="340" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="PERTENCE_A" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="C" target="E">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="PASSOU_POR&lt;br&gt;{data: String}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="C" target="T">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="SOCIA_DE&lt;br&gt;{pct: Integer}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;exitX=0.3;exitY=0;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="E" target="E">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="546" y="50" />
+              <mxPoint x="634" y="50" />
+            </Array>
+            <mxPoint x="0" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r4" value="EMPILHADO_SOBRE" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;exitX=0.3;exitY=0;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="C" target="C">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="114" y="170" />
+              <mxPoint x="186" y="170" />
+            </Array>
+            <mxPoint x="0" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="L" value="&lt;b&gt;Legenda&lt;/b&gt;&lt;br&gt;Caixa = nó, com :Rótulo e propriedades&lt;br&gt;Seta = relacionamento com direção&lt;br&gt;{ } = propriedade do relacionamento&lt;br&gt;(a)-[:SOCIA_DE]-&amp;gt;(b) = a é sócia de b&lt;br&gt;(a)-[:EMPILHADO_SOBRE]-&amp;gt;(b) = a está em cima de b" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=10;dashed=1;strokeColor=#999999;fillColor=#ffffff;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="780" y="180" width="340" height="140" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="real" name="Subgrafo real da E2">
+    <mxGraphModel dx="1200" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="E0" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: E0&lt;br&gt;nome: Empresa 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="40" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="E9" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: E9&lt;br&gt;nome: Empresa 9" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="170" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="E13" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: E13&lt;br&gt;nome: Empresa 13" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="300" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="E20" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: E20&lt;br&gt;nome: Empresa 20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef0ff;strokeColor=#6c5ce7;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="430" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="E2" value="&lt;b&gt;:Empresa&lt;/b&gt;&lt;br&gt;cnpj: E2&lt;br&gt;nome: Empresa 2&lt;br&gt;sancionada: true" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8d7da;strokeColor=#cc0000;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="560" y="220" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="SOCIA_DE {pct: 44}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="E0" target="E2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="SOCIA_DE {pct: 26}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="E9" target="E2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="SOCIA_DE {pct: 75}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="E13" target="E2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="SOCIA_DE {pct: 93}" style="endArrow=block;endFill=1;html=1;fontSize=13;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="E20" target="E2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
