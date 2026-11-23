@@ -1,0 +1,182 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "logiporto.movimentacoes",
+    "parsedQuery": {
+      "$and": [
+        {
+          "classe": {
+            "$eq": "Granel"
+          }
+        },
+        {
+          "terminal": {
+            "$eq": "T4"
+          }
+        },
+        {
+          "ts": {
+            "$gte": {
+              "$date": "2026-06-01T00:00:00Z"
+            }
+          }
+        }
+      ]
+    },
+    "indexFilterSet": false,
+    "queryHash": "02DB7197",
+    "planCacheShapeHash": "02DB7197",
+    "planCacheKey": "55526F9D",
+    "optimizationTimeMillis": 8,
+    "maxIndexedOrSolutionsReached": false,
+    "maxIndexedAndSolutionsReached": false,
+    "maxScansToExplodeReached": false,
+    "prunedSimilarIndexes": false,
+    "winningPlan": {
+      "isCached": false,
+      "stage": "SORT",
+      "sortPattern": {
+        "peso_kg": -1
+      },
+      "memLimit": 104857600,
+      "limitAmount": 20,
+      "type": "simple",
+      "inputStage": {
+        "stage": "COLLSCAN",
+        "filter": {
+          "$and": [
+            {
+              "classe": {
+                "$eq": "Granel"
+              }
+            },
+            {
+              "terminal": {
+                "$eq": "T4"
+              }
+            },
+            {
+              "ts": {
+                "$gte": {
+                  "$date": "2026-06-01T00:00:00Z"
+                }
+              }
+            }
+          ]
+        },
+        "nss": "logiporto.movimentacoes",
+        "direction": "forward"
+      }
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 20,
+    "executionTimeMillis": 727,
+    "totalKeysExamined": 0,
+    "totalDocsExamined": 400000,
+    "executionStages": {
+      "isCached": false,
+      "stage": "SORT",
+      "nReturned": 20,
+      "executionTimeMillisEstimate": 693,
+      "works": 400022,
+      "advanced": 20,
+      "needTime": 400001,
+      "needYield": 0,
+      "saveState": 37,
+      "restoreState": 37,
+      "isEOF": 1,
+      "sortPattern": {
+        "peso_kg": -1
+      },
+      "memLimit": 104857600,
+      "limitAmount": 20,
+      "type": "simple",
+      "totalDataSizeSorted": 6833,
+      "usedDisk": false,
+      "spills": 0,
+      "spilledRecords": 0,
+      "spilledBytes": 0,
+      "spilledDataStorageSize": 0,
+      "peakTrackedMemBytes": 6930,
+      "inputStage": {
+        "stage": "COLLSCAN",
+        "filter": {
+          "$and": [
+            {
+              "classe": {
+                "$eq": "Granel"
+              }
+            },
+            {
+              "terminal": {
+                "$eq": "T4"
+              }
+            },
+            {
+              "ts": {
+                "$gte": {
+                  "$date": "2026-06-01T00:00:00Z"
+                }
+              }
+            }
+          ]
+        },
+        "nReturned": 9741,
+        "executionTimeMillisEstimate": 674,
+        "works": 400001,
+        "advanced": 9741,
+        "needTime": 390259,
+        "needYield": 0,
+        "saveState": 37,
+        "restoreState": 37,
+        "isEOF": 1,
+        "nss": "logiporto.movimentacoes",
+        "direction": "forward",
+        "docsExamined": 400000
+      }
+    }
+  },
+  "queryShapeHash": "A5644B97B299A11A5291853CF80DFD7EE6B0151AF62FFDD0B3E89E44499BBAF4",
+  "command": {
+    "find": "movimentacoes",
+    "filter": {
+      "terminal": "T4",
+      "classe": "Granel",
+      "ts": {
+        "$gte": {
+          "$date": "2026-06-01T00:00:00Z"
+        }
+      }
+    },
+    "sort": {
+      "peso_kg": -1
+    },
+    "hint": {
+      "$natural": 1
+    },
+    "limit": 20,
+    "$db": "logiporto"
+  },
+  "serverInfo": {
+    "host": "cade1d7887ec",
+    "port": 27017,
+    "version": "8.3.11",
+    "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+  },
+  "serverParameters": {
+    "internalQueryFacetBufferSizeBytes": 104857600,
+    "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+    "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+    "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+    "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+    "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+    "internalQueryProhibitBlockingMergeOnMongoS": 0,
+    "internalQueryMaxAddToSetBytes": 104857600,
+    "internalQueryFrameworkControl": "trySbeRestricted",
+    "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+  },
+  "ok": 1
+}

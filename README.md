@@ -42,14 +42,26 @@ Usei IA (Claude) como apoio, com autorização do professor. Todos os comandos e
 
 ## Arquivos
 
-- README.md: parâmetros, respostas e diário de bordo
-- previsoes.md: o que eu esperava antes de rodar cada questão
-- consultas_mongodb.js: todos os comandos usados no MongoDB
-- evidencias: prints dos resultados
+```
+README.md          parâmetros, respostas e evidências de cada questão
+previsoes.md       o que eu esperava antes de rodar cada questão (pré-registro)
+diario.md          hipóteses testadas, erros encontrados e correções
+mongo/             Partes A e B
+  consultas_mongodb.js   todos os comandos usados no MongoDB
+  gerar_explains.js      script que salva os explains em JSON
+  logiporto_gerador.js   gerador do banco, com o meu RA
+  explains/              JSONs completos dos explains
+  evidencias/            prints das execuções
+neo4j/             Parte C
+  consultas_neo4j.cypher todas as consultas usadas no Neo4j
+  grafo_gerador.js       gerador do grafo, com o meu RA
+  grafo.cypher           script Cypher gerado
+  evidencias/            prints das execuções e os diagramas da C1
+```
 
 ## Parte A - MongoDB
 
-Para não ter que procurar os números no meio do explain, que é bem grande, criei uma função chamada `resumo` que mostra só o que a questão pede. O código dela está no consultas_mongodb.js.
+Para não ter que procurar os números no meio do explain, que é bem grande, criei uma função chamada `resumo` que mostra só o que a questão pede. O código dela está no mongo/consultas_mongodb.js.
 
 ### A1. Painel do pátio
 
@@ -65,15 +77,15 @@ db.movimentacoes.find({
 
 a) Sem índice
 
-![A1 a](evidencias/A1a_sem_indice.png)
+![A1 a](mongo/evidencias/A1a_sem_indice.png)
 
 b) Com o índice na ordem do filtro `{ terminal: 1, classe: 1, ts: 1, peso_kg: -1 }`
 
-![A1 b](evidencias/A1b_ordem_filtro.png)
+![A1 b](mongo/evidencias/A1b_ordem_filtro.png)
 
 c) Com o índice pela regra ESR `{ terminal: 1, classe: 1, peso_kg: -1, ts: 1 }`
 
-![A1 c](evidencias/A1c_esr.png)
+![A1 c](mongo/evidencias/A1c_esr.png)
 
 d) Comparação
 
@@ -113,7 +125,7 @@ db.movimentacoes.find({
 }).limit(10)
 ```
 
-![A2 erro](evidencias/A2a_erro_sem_indice.png)
+![A2 erro](mongo/evidencias/A2a_erro_sem_indice.png)
 
 Deu o erro `unable to find index for $geoNear query`. Uma busca normal sem índice ainda consegue ler a coleção inteira, mas o `$near` precisa devolver os resultados por ordem de distância, e o MongoDB só faz isso usando um índice geográfico. Sem ele a consulta nem roda.
 
@@ -123,7 +135,7 @@ Depois criei o índice:
 db.movimentacoes.createIndex({ posicao: "2dsphere" })
 ```
 
-![A2 indice](evidencias/A2b_indice_2dsphere.png)
+![A2 indice](mongo/evidencias/A2b_indice_2dsphere.png)
 
 Escolhi o `2dsphere` porque o campo posicao está no formato GeoJSON e a distância precisa ser calculada em metros, considerando que a Terra é redonda. O índice `2d` serve para um plano e não trabalha em metros.
 
@@ -138,7 +150,7 @@ db.movimentacoes.find({
 }, { _id: 0, container: 1, posicao: 1 }).limit(10).toArray()
 ```
 
-![A2 ordem errada](evidencias/A2c_ordem_google_maps.png)
+![A2 ordem errada](mongo/evidencias/A2c_ordem_google_maps.png)
 
 Voltou vazio e sem nenhum erro. O GeoJSON usa a ordem contrária, primeiro longitude e depois latitude. Com a ordem trocada o banco entende um ponto que existe, mas fica no meio do oceano, bem longe de Paranaguá. Como não tem nada perto de lá, a busca volta vazia sem avisar. Esse é o problema mais perigoso, porque parece que deu certo.
 
@@ -153,9 +165,9 @@ db.movimentacoes.find({
 }, { _id: 0, container: 1, posicao: 1 }).limit(10)
 ```
 
-![A2 resultado 1](evidencias/A2d_resultado_parte1.png)
+![A2 resultado 1](mongo/evidencias/A2d_resultado_parte1.png)
 
-![A2 resultado 2](evidencias/A2d_resultado_parte2.png)
+![A2 resultado 2](mongo/evidencias/A2d_resultado_parte2.png)
 
 Voltaram os 10 registros mais próximos, já em ordem de distância, sem eu precisar usar sort: CTN14966, CTN22280, CTN01260, CTN29540, CTN17399, CTN56094, CTN46454, CTN48264, CTN14920 e CTN12506. O valor 300 do `$maxDistance` é em metros porque o ponto foi passado em GeoJSON.
 
@@ -170,7 +182,7 @@ db.movimentacoes.find({
 }).limit(10).explain("executionStats")
 ```
 
-![A2 explain](evidencias/A2e_explain.png)
+![A2 explain](mongo/evidencias/A2e_explain.png)
 
 | | Valor |
 |---|---|
@@ -201,7 +213,7 @@ Primeiro olhei como um alerta está gravado:
 db.alertas.findOne()
 ```
 
-![A3 findOne](evidencias/A3a_findOne.png)
+![A3 findOne](mongo/evidencias/A3a_findOne.png)
 
 O campo `registrado_em` aparece entre aspas: `'2026-07-05T19:49:33.047Z'`. Isso quer dizer que a data foi gravada como texto, e não como data.
 
@@ -211,13 +223,13 @@ Depois criei o mesmo índice TTL que o desenvolvedor anterior criou, para apagar
 db.alertas.createIndex({ registrado_em: 1 }, { expireAfterSeconds: 2592000 })
 ```
 
-![A3 indice](evidencias/A3b_indice_ttl.png)
+![A3 indice](mongo/evidencias/A3b_indice_ttl.png)
 
 Contei os alertas logo depois e de novo alguns minutos mais tarde. Continuaram 100000, mesmo todos sendo de 2026 e quase todos com bem mais de 30 dias.
 
-![A3 antes](evidencias/A3c_contagem_antes.png)
+![A3 antes](mongo/evidencias/A3c_contagem_antes.png)
 
-![A3 depois](evidencias/A3d_contagem_depois.png)
+![A3 depois](mongo/evidencias/A3d_contagem_depois.png)
 
 Para comprovar o motivo, contei os alertas pelo tipo do campo:
 
@@ -226,9 +238,9 @@ db.alertas.countDocuments({ registrado_em: { $type: "string" } })
 db.alertas.countDocuments({ registrado_em: { $type: "date" } })
 ```
 
-![A3 string](evidencias/A3e_tipo_string.png)
+![A3 string](mongo/evidencias/A3e_tipo_string.png)
 
-![A3 date](evidencias/A3f_tipo_date.png)
+![A3 date](mongo/evidencias/A3f_tipo_date.png)
 
 Todos os 100000 estão como texto e nenhum está como data.
 
@@ -253,13 +265,13 @@ db.alertas.insertOne({ sensor: "TESTE", nivel: "info", registrado_em: new Date(D
 db.alertas.countDocuments({ sensor: "TESTE" })
 ```
 
-![A3 insert](evidencias/A3g_insert_teste.png)
+![A3 insert](mongo/evidencias/A3g_insert_teste.png)
 
-![A3 teste antes](evidencias/A3h_teste_antes.png)
+![A3 teste antes](mongo/evidencias/A3h_teste_antes.png)
 
 Logo depois de gravar a contagem era 1. Uns dois minutos depois rodei de novo e deu 0. O TTL apagou o alerta gravado como data e continuou ignorando os 100000 gravados como texto.
 
-![A3 teste depois](evidencias/A3i_teste_depois.png)
+![A3 teste depois](mongo/evidencias/A3i_teste_depois.png)
 
 ### A4. Consulta coberta
 
@@ -278,15 +290,15 @@ Criei um índice com os dois campos do filtro e o campo que a consulta devolve:
 db.movimentacoes.createIndex({ tipo: 1, terminal: 1, container: 1 })
 ```
 
-![A4 indice](evidencias/A4a_indice.png)
+![A4 indice](mongo/evidencias/A4a_indice.png)
 
 Com `_id: 0` na projeção:
 
-![A4 coberta](evidencias/A4b_coberta.png)
+![A4 coberta](mongo/evidencias/A4b_coberta.png)
 
 Sem o `_id: 0`, ou seja, `{ container: 1 }`:
 
-![A4 sem _id 0](evidencias/A4c_sem_id0.png)
+![A4 sem _id 0](mongo/evidencias/A4c_sem_id0.png)
 
 | | com _id: 0 | sem _id: 0 |
 |---|---|---|
@@ -303,7 +315,7 @@ O tempo ficou igual nos dois (28 ms) porque os dados cabem na memória do meu co
 
 ## Parte B - Aggregation Pipeline
 
-Para o explain do aggregate criei a função `resumoAgg`, parecida com a `resumo` da Parte A. O código está no consultas_mongodb.js.
+Para o explain do aggregate criei a função `resumoAgg`, parecida com a `resumo` da Parte A. O código está no mongo/consultas_mongodb.js.
 
 ### B1. Relatório gerencial
 
@@ -330,11 +342,11 @@ const pipelineB1 = [
 db.movimentacoes.aggregate(pipelineB1)
 ```
 
-![B1 pipeline](evidencias/B1a_pipeline.png)
+![B1 pipeline](mongo/evidencias/B1a_pipeline.png)
 
 Resultado:
 
-![B1 resultado](evidencias/B1b_resultado.png)
+![B1 resultado](mongo/evidencias/B1b_resultado.png)
 
 | terminal | total_movimentacoes | peso_total | peso_medio | maior_peso |
 |---|---|---|---|---|
@@ -350,7 +362,7 @@ Explain antes de criar o índice:
 db.movimentacoes.explain("executionStats").aggregate(pipelineB1)
 ```
 
-![B1 sem indice](evidencias/B1c_explain_sem_indice.png)
+![B1 sem indice](mongo/evidencias/B1c_explain_sem_indice.png)
 
 Criei um índice com os dois campos do $match. Classe vem primeiro porque é igualdade e a data depois porque é faixa:
 
@@ -358,11 +370,11 @@ Criei um índice com os dois campos do $match. Classe vem primeiro porque é igu
 db.movimentacoes.createIndex({ classe: 1, ts: 1 })
 ```
 
-![B1 indice](evidencias/B1d_indice.png)
+![B1 indice](mongo/evidencias/B1d_indice.png)
 
 Explain depois do índice:
 
-![B1 com indice](evidencias/B1e_explain_com_indice.png)
+![B1 com indice](mongo/evidencias/B1e_explain_com_indice.png)
 
 | | sem índice | com índice { classe: 1, ts: 1 } |
 |---|---|---|
@@ -380,7 +392,7 @@ Para confirmar, contei os documentos que passam no filtro do $match:
 db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06-01") } })
 ```
 
-![B1 contagem](evidencias/B1f_contagem_match.png)
+![B1 contagem](mongo/evidencias/B1f_contagem_match.png)
 
 Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações para descartar a maioria. Com o índice ele vai direto nas chaves de Granel a partir de junho e só lê os documentos que realmente entram no $group. Nenhuma chave foi lida à toa, porque keys e docs examinados são iguais ao resultado do filtro.
 
@@ -403,11 +415,11 @@ const pipelineErrado = [
 db.movimentacoes.aggregate(pipelineErrado)
 ```
 
-![B2 pipeline errado](evidencias/B2a_pipeline_errado.png)
+![B2 pipeline errado](mongo/evidencias/B2a_pipeline_errado.png)
 
 Saída obtida:
 
-![B2 saida errada](evidencias/B2b_saida_errada.png)
+![B2 saida errada](mongo/evidencias/B2b_saida_errada.png)
 
 ```
 [ { _id: { terminal: 'T2', classe: 'Granel' }, kg_total: 0, mov: 20053 } ]
@@ -415,7 +427,7 @@ Saída obtida:
 
 Veio só 1 terminal no lugar de 3, e com peso total 0, o que não faz sentido, já que todo contêiner pesa pelo menos 1000 kg.
 
-![B2 explain errado](evidencias/B2c_explain_errado.png)
+![B2 explain errado](mongo/evidencias/B2c_explain_errado.png)
 
 O explain mostra que ele leu as 400 mil movimentações (COLLSCAN) e montou 20 grupos, que são todas as combinações de 5 terminais com 4 classes.
 
@@ -447,9 +459,9 @@ const pipelineCorrigido = [
 db.movimentacoes.aggregate(pipelineCorrigido)
 ```
 
-![B2 pipeline corrigido](evidencias/B2d_pipeline_corrigido.png)
+![B2 pipeline corrigido](mongo/evidencias/B2d_pipeline_corrigido.png)
 
-![B2 saida corrigida](evidencias/B2e_saida_corrigida.png)
+![B2 saida corrigida](mongo/evidencias/B2e_saida_corrigida.png)
 
 | terminal | kg_total | mov |
 |---|---|---|
@@ -459,11 +471,11 @@ db.movimentacoes.aggregate(pipelineCorrigido)
 
 Não precisei criar índice novo. O índice `{ classe: 1, ts: 1 }` da B1 começa por classe, então serve para um filtro só de classe também.
 
-![B2 explain corrigido](evidencias/B2f_explain_corrigido.png)
+![B2 explain corrigido](mongo/evidencias/B2f_explain_corrigido.png)
 
 Para provar que o resultado está certo, rodei o mesmo cálculo sem o `$limit`, mostrando os 5 terminais:
 
-![B2 conferencia](evidencias/B2g_conferencia.png)
+![B2 conferencia](mongo/evidencias/B2g_conferencia.png)
 
 T3, T1 e T2 são mesmo os três maiores. T5 e T4 ficam abaixo. O total de movimentações do T4 deu 19545, o mesmo número que aparece no meu Código de Autenticidade (LP-241959542-19545-33562), que o gerador calcula justamente para Granel no T4. Isso confirma que a contagem bate com o banco gerado pelo meu RA.
 
@@ -486,7 +498,7 @@ Com o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1
 
 Ao terminar as Partes A e B rodei `db.movimentacoes.getIndexes()` para conferir se não ficou nenhum índice de teste sobrando.
 
-![Auditoria](evidencias/B3_auditoria_indices.png)
+![Auditoria](mongo/evidencias/B3_auditoria_indices.png)
 
 | Índice | Para que serve |
 |---|---|
@@ -504,17 +516,17 @@ O índice do item b da A1 (`terminal, classe, ts, peso_kg`) foi apagado, porque 
 
 Modelo do grafo:
 
-![C1 modelo](evidencias/C1_modelo.png)
+![C1 modelo](neo4j/evidencias/C1_modelo_grafo.png)
 
 Cada caixa é um tipo de nó, com as suas propriedades. Cada seta é um relacionamento, com a direção e as propriedades dele. Uma empresa pode ser sócia de outra empresa, o contêiner pertence a uma empresa, passa por terminais em uma data e pode estar empilhado em cima de outro contêiner. Não tem chave estrangeira nem tabela no meio. A participação societária e a data da passagem ficam guardadas no próprio relacionamento.
 
 Exemplo real do meu grafo, a empresa sancionada E2 e os sócios diretos dela:
 
-![C1 subgrafo E2](evidencias/C1_subgrafo_E2.png)
+![C1 subgrafo E2](neo4j/evidencias/C1_exemplo_E2.png)
 
 Esses dados saíram do meu banco no Neo4j:
 
-![C1 socios](evidencias/C1_socios_E2.png)
+![C1 socios](neo4j/evidencias/C1_socios_E2.png)
 
 Todas as 4 setas chegam na E2. Ela não é sócia de ninguém, só tem sócios.
 
@@ -532,7 +544,7 @@ RETURN DISTINCT x.nome AS empresa, kx.id AS container, t.nome AS terminal, px.da
 ORDER BY empresa, data
 ```
 
-![C2 resultado](evidencias/C2a_resultado.png)
+![C2 resultado](neo4j/evidencias/C2a_resultado.png)
 
 | empresa | container | terminal | data |
 |---|---|---|---|
@@ -551,7 +563,7 @@ MATCH (s:Empresa {sancionada: true})-[:SOCIA_DE*1..3]->(x:Empresa)
 RETURN count(DISTINCT x) AS empresas_alcancadas
 ```
 
-![C2 direcao contraria](evidencias/C2b_direcao_contraria.png)
+![C2 direcao contraria](neo4j/evidencias/C2b_direcao_contraria.png)
 
 Deu 0. A E2 não tem nenhuma seta saindo, então nessa direção não se chega em ninguém.
 
@@ -576,15 +588,15 @@ CREATE (a:Empresa {cnpj:'E1'})-[:SOCIA_DE {pct:30}]->(b:Empresa {cnpj:'E2'})
 
 Sintoma. Antes de rodar havia 30 empresas.
 
-![C3 i antes](evidencias/C3i_a_contagem_antes.png)
+![C3 i antes](neo4j/evidencias/C3i_a_contagem_antes.png)
 
 O Neo4j respondeu "Created 2 nodes", quando o certo seria não criar nenhuma empresa, só a ligação.
 
-![C3 i create](evidencias/C3i_b_create.png)
+![C3 i create](neo4j/evidencias/C3i_b_create.png)
 
 Procurando E1 e E2 aparecem as originais, com nome, e cópias sem nome e sem a informação de sancionada. Sem querer eu rodei o comando duas vezes, por isso vieram 2 cópias de cada.
 
-![C3 i duplicadas](evidencias/C3i_c_duplicadas.png)
+![C3 i duplicadas](neo4j/evidencias/C3i_c_duplicadas.png)
 
 Causa raiz. O `CREATE` sempre cria tudo o que está escrito no padrão, nós e relacionamento. Escrever `(a:Empresa {cnpj:'E1'})` dentro de um `CREATE` não procura a empresa que já existe, cria uma nova com esse cnpj. A ligação foi feita entre duas empresas novas e vazias, e as empresas de verdade continuaram sem a ligação. Cada vez que o comando roda, cria mais duas cópias.
 
@@ -594,7 +606,7 @@ Limpeza das cópias, conforme a prova pede antes de rodar a correção:
 MATCH (e:Empresa) WHERE e.nome IS NULL DETACH DELETE e
 ```
 
-![C3 i limpeza](evidencias/C3i_d_limpeza.png)
+![C3 i limpeza](neo4j/evidencias/C3i_d_limpeza.png)
 
 Apagou as 4 cópias e as 2 ligações falsas.
 
@@ -609,11 +621,11 @@ RETURN a.nome, r.pct, b.nome
 
 Primeiro o `MATCH` encontra as duas empresas que já existem. Depois o `MERGE` cria a ligação só se ela ainda não existir. Se o comando rodar de novo, não duplica nada. O `ON CREATE SET` coloca o pct só quando a ligação é criada.
 
-![C3 i merge](evidencias/C3i_e_merge.png)
+![C3 i merge](neo4j/evidencias/C3i_e_merge.png)
 
 Evidência. Criou só 1 relacionamento, entre Empresa 1 e Empresa 2, e o total voltou a ser 30 empresas.
 
-![C3 i depois](evidencias/C3i_f_contagem_depois.png)
+![C3 i depois](neo4j/evidencias/C3i_f_contagem_depois.png)
 
 O Neo4j mostrou um aviso de "produto cartesiano" porque o `MATCH` tem dois padrões separados. Aqui não tem problema, já que cada um encontra uma empresa só, 1 x 1 = 1 combinação. Para evitar cópias de vez, o ideal seria também criar uma regra de cnpj único com `CREATE CONSTRAINT FOR (e:Empresa) REQUIRE e.cnpj IS UNIQUE`. Aí um `CREATE` errado daria erro em vez de duplicar.
 
@@ -627,9 +639,9 @@ MATCH (s:Empresa {sancionada:true})-[:SOCIA_DE*]-(x:Empresa) RETURN x.nome
 
 Sintoma. Rodei com `LIMIT 20`, como a prova orienta, para não travar o Neo4j:
 
-![C3 ii sintoma 1](evidencias/C3ii_a_sintoma_parte1.png)
+![C3 ii sintoma 1](neo4j/evidencias/C3ii_a_sintoma_parte1.png)
 
-![C3 ii sintoma 2](evidencias/C3ii_a_sintoma_parte2.png)
+![C3 ii sintoma 2](neo4j/evidencias/C3ii_a_sintoma_parte2.png)
 
 Em só 20 linhas já tem empresa repetida, como Empresa 8, Empresa 19 e Empresa 20, e aparece até a Empresa 2, que é a própria sancionada.
 
@@ -648,7 +660,7 @@ MATCH (x:Empresa)-[:SOCIA_DE*1..3]->(s:Empresa {sancionada:true})
 RETURN DISTINCT x.nome ORDER BY x.nome
 ```
 
-![C3 ii corrigida](evidencias/C3ii_b_corrigida.png)
+![C3 ii corrigida](neo4j/evidencias/C3ii_b_corrigida.png)
 
 Evidência. Voltaram 12 empresas, sem repetição e sem a E2: Empresa 0, 1, 3, 4, 6, 9, 11, 13, 17, 20, 21 e 23. São as mesmas empresas que a primeira parte da C2 usa. A direção chegando na E2 está justificada na C2.
 
@@ -662,7 +674,7 @@ Troquei 'BASE_DA_PILHA' pela minha base, K8.
 
 Sintoma. Não voltou nada, "No changes, no records".
 
-![C3 iii antes](evidencias/C3iii_a_antes.png)
+![C3 iii antes](neo4j/evidencias/C3iii_a_antes.png)
 
 Causa raiz. A seta está ao contrário. No grafo, `(a)-[:EMPILHADO_SOBRE]->(b)` quer dizer que a está em cima de b, então a seta sai do contêiner de cima e aponta para o de baixo. O K8 é a base da pilha, não está em cima de ninguém, por isso não sai nenhuma seta dele. A consulta procurava o que está embaixo da base, e embaixo da base não tem nada.
 
@@ -673,7 +685,7 @@ MATCH (base:Container {id:'K8'})<-[:EMPILHADO_SOBRE*1..3]-(x:Container)
 RETURN x.id ORDER BY x.id
 ```
 
-![C3 iii corrigida](evidencias/C3iii_b_corrigida.png)
+![C3 iii corrigida](neo4j/evidencias/C3iii_b_corrigida.png)
 
 Evidência. Voltaram K9, K10 e K11. O K9 está direto em cima do K8, o K10 em cima do K9 e o K11 em cima do K10. Se o K8 for retirado, os três ficam presos.
 
@@ -685,7 +697,7 @@ MATCH (k:Container)-[:PASSOU_POR]->(t:Terminal) WHERE k.classe = 'Perigoso' RETU
 
 Sintoma. Os números vêm maiores do que deveriam.
 
-![C3 iv antes](evidencias/C3iv_a_antes.png)
+![C3 iv antes](neo4j/evidencias/C3iv_a_antes.png)
 
 Causa raiz. O `MATCH` devolve uma linha para cada passagem, ou seja, para cada relacionamento PASSOU_POR, e o `count(k)` conta linhas. Cada contêiner tem 2 passagens, e às vezes as duas foram no mesmo terminal, em datas diferentes. Nesse caso o mesmo contêiner aparece em 2 linhas daquele terminal e é contado 2 vezes. A pergunta é quantos contêineres diferentes, e não quantas passagens.
 
@@ -696,7 +708,7 @@ MATCH (k:Container)-[:PASSOU_POR]->(t:Terminal) WHERE k.classe = 'Perigoso'
 RETURN t.nome, count(DISTINCT k) ORDER BY t.nome
 ```
 
-![C3 iv corrigida](evidencias/C3iv_b_corrigida.png)
+![C3 iv corrigida](neo4j/evidencias/C3iv_b_corrigida.png)
 
 Evidência
 
@@ -710,21 +722,24 @@ Evidência
 
 T1, T2 e T5 tinham contêineres perigosos contados duas vezes. No T1, por exemplo, o K14 passou duas vezes (dias 09 e 19 de outubro) e o K73 também (dias 13 e 14). T3 e T4 não mudaram porque nenhum contêiner perigoso passou duas vezes por eles.
 
+## Explains completos em JSON
+
+Além dos prints, salvei o explain completo de cada consulta das Partes A e B na pasta mongo/explains, gerados pelo script mongo/gerar_explains.js. Nos casos sem índice usei `hint({ $natural: 1 })`, que obriga o MongoDB a ler a coleção inteira, para não precisar apagar os índices de novo.
+
+| Arquivo | Questão |
+|---|---|
+| A1a_sem_indice.json | A1 a |
+| A1b_ordem_filtro.json | A1 b |
+| A1c_esr.json | A1 c |
+| A2_geo_near.json | A2 |
+| A4a_coberta.json | A4 com _id: 0 |
+| A4b_sem_id0.json | A4 sem _id: 0 |
+| B1a_sem_indice.json | B1 antes do índice |
+| B1b_com_indice.json | B1 depois do índice |
+| B2a_errado.json | B2 pipeline original |
+| B2b_corrigido.json | B2 pipeline corrigido |
+| indices_finais.json | auditoria de índices |
+
 ## Diário de bordo
 
-- O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
-- A primeira versão do grafo.cypher saiu com o texto do terminal misturado. Gerei de novo copiando o script para o contêiner e usando `--file --quiet`.
-- O Neo4j ainda tinha os dados do exercício da aula (Antena, CoreRouter e Switch). Apaguei tudo com `MATCH (n) DETACH DELETE n` antes de carregar o grafo da prova e conferi 5 terminais, 30 empresas e 90 contêineres.
-- A1: na primeira vez esqueci de tirar o print do item b. Apaguei o índice ESR, criei de novo o índice do item b, rodei o explain e depois voltei o ESR.
-- A1 b: eu tinha previsto uns 9,7 mil documentos lidos, mas foram só 20. As chaves bateram, 9741. Eu não tinha pensado que, como o peso está no índice, o banco ordena pelas chaves e só busca os documentos no final.
-- A2: com as coordenadas na ordem do Google Maps o terminal não mostrou nada, e parecia que o comando nem tinha rodado. Repeti com `.toArray()` para aparecer o `[]`.
-- A2: eu tinha previsto centenas de chaves e documentos lidos. Foram 102 chaves e 36 documentos, porque a busca para assim que acha os 10 mais perto, e eles estavam a poucos metros do ponto.
-- A3: minha hipótese do pré-registro, de que o campo estava gravado como texto, se confirmou. O primeiro sinal foi o findOne mostrar a data entre aspas.
-- A3: o alerta de teste não some na hora. A tarefa do TTL roda a cada 60 segundos, então esperei uns dois minutos antes de contar de novo.
-- A4: a previsão de uns 16 mil registros bateu, foram 15945. O estágio sem o `_id: 0` apareceu como PROJECTION_SIMPLE em vez de só PROJECTION, mas o importante, o FETCH, apareceu como eu esperava.
-- B1: eu tinha previsto uns 49 a 50 mil documentos entrando no $group, e foram 49610. No começo estranhei o nReturned 5 no explain, achei que fosse o número de documentos que entraram. Depois entendi que, nessa versão do MongoDB, o $group roda junto com a busca e o nReturned é a saída do grupo, um por terminal. Confirmei a entrada contando os documentos do $match.
-- B2: previ que o pipeline errado ia trazer 0 ou 1 documento, com peso 0. Veio 1 documento (T2), com peso 0.
-- B2: esperava que o pipeline corrigido também ficasse mais rápido, mas o tempo foi parecido (103 ms contra 111 ms). Entendi que buscar 1/4 dos documentos pelo índice, um por um, custa parecido com ler a coleção inteira em sequência quando tudo está na memória. O ganho real aparece em documentos lidos e em grupos na memória.
-- C2: eu tinha previsto a direção chegando na E2, porque no script ela só aparece no campo "para" das sociedades, e o teste no sentido contrário deu 0 como eu esperava. Previ entre 0 e 5 registros e vieram 5.
-- C3 (i): rodei o CREATE com defeito duas vezes sem perceber e acabaram sendo criadas 4 empresas falsas em vez de 2. Isso acabou mostrando bem o problema, porque cada execução duplica de novo. Apaguei as 4 com o DETACH DELETE antes de rodar a versão com MERGE.
-- C3 (ii): no print grande do Neo4j os resultados ficaram empilhados e repetidos, então recortei só a parte de cada consulta para as evidências.
+O diário de bordo, com as hipóteses que falharam, os erros e as correções, está no arquivo [diario.md](diario.md).

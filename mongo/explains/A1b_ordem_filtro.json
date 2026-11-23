@@ -1,0 +1,230 @@
+{
+  "explainVersion": "1",
+  "queryPlanner": {
+    "namespace": "logiporto.movimentacoes",
+    "parsedQuery": {
+      "$and": [
+        {
+          "classe": {
+            "$eq": "Granel"
+          }
+        },
+        {
+          "terminal": {
+            "$eq": "T4"
+          }
+        },
+        {
+          "ts": {
+            "$gte": {
+              "$date": "2026-06-01T00:00:00Z"
+            }
+          }
+        }
+      ]
+    },
+    "indexFilterSet": false,
+    "queryHash": "02DB7197",
+    "planCacheShapeHash": "02DB7197",
+    "planCacheKey": "196180D6",
+    "optimizationTimeMillis": 3,
+    "maxIndexedOrSolutionsReached": false,
+    "maxIndexedAndSolutionsReached": false,
+    "maxScansToExplodeReached": false,
+    "prunedSimilarIndexes": false,
+    "winningPlan": {
+      "isCached": false,
+      "stage": "FETCH",
+      "nss": "logiporto.movimentacoes",
+      "inputStage": {
+        "stage": "SORT",
+        "sortPattern": {
+          "peso_kg": -1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "default",
+        "inputStage": {
+          "stage": "IXSCAN",
+          "nss": "logiporto.movimentacoes",
+          "keyPattern": {
+            "terminal": 1,
+            "classe": 1,
+            "ts": 1,
+            "peso_kg": -1
+          },
+          "indexName": "terminal_1_classe_1_ts_1_peso_kg_-1",
+          "isMultiKey": false,
+          "multiKeyPaths": {
+            "terminal": [],
+            "classe": [],
+            "ts": [],
+            "peso_kg": []
+          },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "terminal": [
+              "[\"T4\", \"T4\"]"
+            ],
+            "classe": [
+              "[\"Granel\", \"Granel\"]"
+            ],
+            "ts": [
+              "[new Date(1780272000000), new Date(9223372036854775807)]"
+            ],
+            "peso_kg": [
+              "[MaxKey, MinKey]"
+            ]
+          }
+        }
+      }
+    },
+    "rejectedPlans": []
+  },
+  "executionStats": {
+    "executionSuccess": true,
+    "nReturned": 20,
+    "executionTimeMillis": 23,
+    "totalKeysExamined": 9741,
+    "totalDocsExamined": 20,
+    "executionStages": {
+      "isCached": false,
+      "stage": "FETCH",
+      "nReturned": 20,
+      "executionTimeMillisEstimate": 20,
+      "works": 9763,
+      "advanced": 20,
+      "needTime": 9742,
+      "needYield": 0,
+      "saveState": 1,
+      "restoreState": 1,
+      "isEOF": 1,
+      "nss": "logiporto.movimentacoes",
+      "docsExamined": 20,
+      "alreadyHasObj": 0,
+      "inputStage": {
+        "stage": "SORT",
+        "nReturned": 20,
+        "executionTimeMillisEstimate": 20,
+        "works": 9762,
+        "advanced": 20,
+        "needTime": 9742,
+        "needYield": 0,
+        "saveState": 1,
+        "restoreState": 1,
+        "isEOF": 1,
+        "sortPattern": {
+          "peso_kg": -1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "default",
+        "totalDataSizeSorted": 1820,
+        "usedDisk": false,
+        "spills": 0,
+        "spilledRecords": 0,
+        "spilledBytes": 0,
+        "spilledDataStorageSize": 0,
+        "peakTrackedMemBytes": 1820,
+        "inputStage": {
+          "stage": "IXSCAN",
+          "nReturned": 9741,
+          "executionTimeMillisEstimate": 10,
+          "works": 9742,
+          "advanced": 9741,
+          "needTime": 0,
+          "needYield": 0,
+          "saveState": 1,
+          "restoreState": 1,
+          "isEOF": 1,
+          "nss": "logiporto.movimentacoes",
+          "keyPattern": {
+            "terminal": 1,
+            "classe": 1,
+            "ts": 1,
+            "peso_kg": -1
+          },
+          "indexName": "terminal_1_classe_1_ts_1_peso_kg_-1",
+          "isMultiKey": false,
+          "multiKeyPaths": {
+            "terminal": [],
+            "classe": [],
+            "ts": [],
+            "peso_kg": []
+          },
+          "isUnique": false,
+          "isSparse": false,
+          "isPartial": false,
+          "indexVersion": 2,
+          "direction": "forward",
+          "indexBounds": {
+            "terminal": [
+              "[\"T4\", \"T4\"]"
+            ],
+            "classe": [
+              "[\"Granel\", \"Granel\"]"
+            ],
+            "ts": [
+              "[new Date(1780272000000), new Date(9223372036854775807)]"
+            ],
+            "peso_kg": [
+              "[MaxKey, MinKey]"
+            ]
+          },
+          "keysExamined": 9741,
+          "seeks": 1,
+          "dupsTested": 0,
+          "dupsDropped": 0,
+          "peakTrackedMemBytes": 0
+        }
+      }
+    }
+  },
+  "queryShapeHash": "A5644B97B299A11A5291853CF80DFD7EE6B0151AF62FFDD0B3E89E44499BBAF4",
+  "command": {
+    "find": "movimentacoes",
+    "filter": {
+      "terminal": "T4",
+      "classe": "Granel",
+      "ts": {
+        "$gte": {
+          "$date": "2026-06-01T00:00:00Z"
+        }
+      }
+    },
+    "sort": {
+      "peso_kg": -1
+    },
+    "hint": {
+      "terminal": 1,
+      "classe": 1,
+      "ts": 1,
+      "peso_kg": -1
+    },
+    "limit": 20,
+    "$db": "logiporto"
+  },
+  "serverInfo": {
+    "host": "cade1d7887ec",
+    "port": 27017,
+    "version": "8.3.11",
+    "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+  },
+  "serverParameters": {
+    "internalQueryFacetBufferSizeBytes": 104857600,
+    "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+    "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+    "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+    "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+    "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+    "internalQueryProhibitBlockingMergeOnMongoS": 0,
+    "internalQueryMaxAddToSetBytes": 104857600,
+    "internalQueryFrameworkControl": "trySbeRestricted",
+    "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+  },
+  "ok": 1
+}

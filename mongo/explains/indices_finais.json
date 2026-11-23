@@ -1,0 +1,44 @@
+[
+  {
+    "v": 2,
+    "key": {
+      "_id": 1
+    },
+    "name": "_id_"
+  },
+  {
+    "v": 2,
+    "key": {
+      "terminal": 1,
+      "classe": 1,
+      "peso_kg": -1,
+      "ts": 1
+    },
+    "name": "terminal_1_classe_1_peso_kg_-1_ts_1"
+  },
+  {
+    "v": 2,
+    "key": {
+      "posicao": "2dsphere"
+    },
+    "name": "posicao_2dsphere",
+    "2dsphereIndexVersion": 4
+  },
+  {
+    "v": 2,
+    "key": {
+      "tipo": 1,
+      "terminal": 1,
+      "container": 1
+    },
+    "name": "tipo_1_terminal_1_container_1"
+  },
+  {
+    "v": 2,
+    "key": {
+      "classe": 1,
+      "ts": 1
+    },
+    "name": "classe_1_ts_1"
+  }
+]

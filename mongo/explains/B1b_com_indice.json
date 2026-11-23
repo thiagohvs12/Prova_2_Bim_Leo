@@ -1,0 +1,310 @@
+{
+  "explainVersion": "2",
+  "stages": [
+    {
+      "$cursor": {
+        "queryPlanner": {
+          "namespace": "logiporto.movimentacoes",
+          "parsedQuery": {
+            "$and": [
+              {
+                "classe": {
+                  "$eq": "Granel"
+                }
+              },
+              {
+                "ts": {
+                  "$gte": {
+                    "$date": "2026-06-01T00:00:00Z"
+                  }
+                }
+              }
+            ]
+          },
+          "indexFilterSet": false,
+          "queryHash": "6C86C973",
+          "planCacheShapeHash": "6C86C973",
+          "planCacheKey": "284CB8BF",
+          "optimizationTimeMillis": 1,
+          "cursorType": "regular",
+          "maxIndexedOrSolutionsReached": false,
+          "maxIndexedAndSolutionsReached": false,
+          "maxScansToExplodeReached": false,
+          "prunedSimilarIndexes": false,
+          "winningPlan": {
+            "isCached": false,
+            "queryPlan": {
+              "stage": "GROUP",
+              "planNodeId": 4,
+              "inputStage": {
+                "stage": "FETCH",
+                "planNodeId": 2,
+                "nss": "logiporto.movimentacoes",
+                "inputStage": {
+                  "stage": "IXSCAN",
+                  "planNodeId": 1,
+                  "nss": "logiporto.movimentacoes",
+                  "keyPattern": {
+                    "classe": 1,
+                    "ts": 1
+                  },
+                  "indexName": "classe_1_ts_1",
+                  "isMultiKey": false,
+                  "multiKeyPaths": {
+                    "classe": [],
+                    "ts": []
+                  },
+                  "isUnique": false,
+                  "isSparse": false,
+                  "isPartial": false,
+                  "indexVersion": 2,
+                  "direction": "forward",
+                  "indexBounds": {
+                    "classe": [
+                      "[\"Granel\", \"Granel\"]"
+                    ],
+                    "ts": [
+                      "[new Date(1780272000000), new Date(9223372036854775807)]"
+                    ]
+                  }
+                }
+              }
+            },
+            "slotBasedPlan": {
+              "slots": "$$RESULT=s21 env: { s5 = {\"classe\" : 1, \"ts\" : 1} }",
+              "stages": "[4] project [s21 = newObj(\"_id\", s18, \"total_movimentacoes\", s10, \"peso_total\", s19, \"peso_medio\", s14, \"maior_peso\", s20)] \n[4] project [s19 = doubleDoubleSumFinalize(s13), s20 = (s17 ?: null)] \n[4] group [s18] [s10 = _internalCount::accumulate(s10, 1), s13 = aggDoubleDoubleSum(s8), s14 = _internalArithmeticAverage::accumulate(s14, s8), s17 = max(fillType(s8, 1088, Nothing))] spillSlots[s11, s12, s15, s16] mergingExprs[_internalCount::merge(s11), aggMergeDoubleDoubleSums(s12), _internalArithmeticAverage::merge(s15), max(fillType(s16, 1088, Nothing))] \n[4] project [s18 = (s9 ?: null)] \n[2] fetch s1 = seek, s6 = result, s7 = recordId, s4 = inSnapshotId, s2 = inIndexIdent, s3 = inIndexKey, s5 = inIndexKeyPattern [s8 = peso_kg, s9 = terminal] @\"c276b77b-8bdc-4ed2-869b-7c53880fb0cc\" \n[1] ixseek seekKeyLow = KS(3C4772616E656C00788000019E807AEC0001) seekKeyHigh = KS(3C4772616E656C0078FFFFFFFFFFFFFFFFFE) [s3 = indexKey, s1 = recordId, s4 = snapshotId, s2 = indexIdent] [] @\"c276b77b-8bdc-4ed2-869b-7c53880fb0cc\" @\"classe_1_ts_1\" forward "
+            }
+          },
+          "rejectedPlans": []
+        },
+        "executionStats": {
+          "executionSuccess": true,
+          "nReturned": 5,
+          "executionTimeMillis": 81,
+          "totalKeysExamined": 49610,
+          "totalDocsExamined": 49610,
+          "executionStages": {
+            "stage": "project",
+            "planNodeId": 4,
+            "nReturned": 5,
+            "executionTimeMillisEstimate": 74,
+            "opens": 1,
+            "closes": 1,
+            "saveState": 6,
+            "restoreState": 5,
+            "isEOF": 1,
+            "projections": {
+              "21": "newObj(\"_id\", s18, \"total_movimentacoes\", s10, \"peso_total\", s19, \"peso_medio\", s14, \"maior_peso\", s20) "
+            },
+            "inputStage": {
+              "stage": "project",
+              "planNodeId": 4,
+              "nReturned": 5,
+              "executionTimeMillisEstimate": 74,
+              "opens": 1,
+              "closes": 1,
+              "saveState": 6,
+              "restoreState": 5,
+              "isEOF": 1,
+              "projections": {
+                "19": "doubleDoubleSumFinalize(s13) ",
+                "20": "(s17 ?: null) "
+              },
+              "inputStage": {
+                "stage": "group",
+                "planNodeId": 4,
+                "nReturned": 5,
+                "executionTimeMillisEstimate": 74,
+                "opens": 1,
+                "closes": 1,
+                "saveState": 6,
+                "restoreState": 5,
+                "isEOF": 1,
+                "groupBySlots": [
+                  18
+                ],
+                "expressions": {
+                  "10": "_internalCount::accumulate(s10, 1) ",
+                  "13": "aggDoubleDoubleSum(s8) ",
+                  "14": "_internalArithmeticAverage::accumulate(s14, s8) ",
+                  "17": "max(fillType(s8, 1088, Nothing)) ",
+                  "initExprs": {
+                    "10": null,
+                    "13": null,
+                    "14": null,
+                    "17": null,
+                    "mergingExprs": {
+                      "11": "_internalCount::merge(s11) ",
+                      "12": "aggMergeDoubleDoubleSums(s12) ",
+                      "15": "_internalArithmeticAverage::merge(s15) ",
+                      "16": "max(fillType(s16, 1088, Nothing)) "
+                    }
+                  }
+                },
+                "usedDisk": false,
+                "spills": 0,
+                "spilledBytes": 0,
+                "spilledRecords": 0,
+                "spilledDataStorageSize": 0,
+                "peakTrackedMemBytes": 1105,
+                "inputStage": {
+                  "stage": "project",
+                  "planNodeId": 4,
+                  "nReturned": 49610,
+                  "executionTimeMillisEstimate": 53,
+                  "opens": 1,
+                  "closes": 1,
+                  "saveState": 6,
+                  "restoreState": 5,
+                  "isEOF": 1,
+                  "projections": {
+                    "18": "(s9 ?: null) "
+                  },
+                  "inputStage": {
+                    "stage": "fetch",
+                    "planNodeId": 2,
+                    "nReturned": 49610,
+                    "executionTimeMillisEstimate": 53,
+                    "opens": 1,
+                    "closes": 1,
+                    "saveState": 6,
+                    "restoreState": 5,
+                    "isEOF": 1,
+                    "numReads": 49610,
+                    "inputStage": {
+                      "stage": "ixseek",
+                      "planNodeId": 1,
+                      "nReturned": 49610,
+                      "executionTimeMillisEstimate": 34,
+                      "opens": 1,
+                      "closes": 1,
+                      "saveState": 6,
+                      "restoreState": 5,
+                      "isEOF": 1,
+                      "indexName": "classe_1_ts_1",
+                      "keysExamined": 49610,
+                      "seeks": 1,
+                      "numReads": 49611,
+                      "indexKeySlot": 3,
+                      "recordIdSlot": 1,
+                      "snapshotIdSlot": 4,
+                      "indexIdentSlot": 2,
+                      "outputSlots": [],
+                      "indexKeysToInclude": "00000000000000000000000000000000",
+                      "seekKeyLow": "KS(3C4772616E656C00788000019E807AEC0001) ",
+                      "seekKeyHigh": "KS(3C4772616E656C0078FFFFFFFFFFFFFFFFFE) "
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "nReturned": 5,
+      "executionTimeMillisEstimate": 75
+    },
+    {
+      "$sort": {
+        "sortKey": {
+          "peso_total": -1
+        },
+        "limit": 3
+      },
+      "totalDataSizeSortedBytesEstimate": 1119,
+      "usedDisk": false,
+      "spills": 0,
+      "spilledBytes": 0,
+      "spilledRecords": 0,
+      "spilledDataStorageSize": 0,
+      "nReturned": 3,
+      "executionTimeMillisEstimate": 75,
+      "peakTrackedMemBytes": 1119
+    },
+    {
+      "$project": {
+        "total_movimentacoes": true,
+        "peso_total": true,
+        "peso_medio": true,
+        "maior_peso": true,
+        "terminal": "$_id",
+        "_id": false
+      },
+      "nReturned": 3,
+      "executionTimeMillisEstimate": 75
+    }
+  ],
+  "queryShapeHash": "D229E43DD30A79D7E780BC64DB864BDB0A8EA33E5DED6F83D027C454FD46D460",
+  "peakTrackedMemBytes": 1105,
+  "serverInfo": {
+    "host": "cade1d7887ec",
+    "port": 27017,
+    "version": "8.3.11",
+    "gitVersion": "b8b83d6e6e1aed495578ad8c6f9234ad329c9955"
+  },
+  "serverParameters": {
+    "internalQueryFacetBufferSizeBytes": 104857600,
+    "internalDocumentSourceGroupMaxMemoryBytes": 104857600,
+    "internalQueryMaxBlockingSortMemoryUsageBytes": 104857600,
+    "internalDocumentSourceSetWindowFieldsMaxMemoryBytes": 104857600,
+    "internalQueryFacetMaxOutputDocSizeBytes": 104857600,
+    "internalLookupStageIntermediateDocumentMaxSizeBytes": 104857600,
+    "internalQueryProhibitBlockingMergeOnMongoS": 0,
+    "internalQueryMaxAddToSetBytes": 104857600,
+    "internalQueryFrameworkControl": "trySbeRestricted",
+    "internalQueryPlannerIgnoreIndexWithCollationForRegex": 1
+  },
+  "command": {
+    "aggregate": "movimentacoes",
+    "pipeline": [
+      {
+        "$match": {
+          "classe": "Granel",
+          "ts": {
+            "$gte": {
+              "$date": "2026-06-01T00:00:00Z"
+            }
+          }
+        }
+      },
+      {
+        "$group": {
+          "_id": "$terminal",
+          "total_movimentacoes": {
+            "$sum": 1
+          },
+          "peso_total": {
+            "$sum": "$peso_kg"
+          },
+          "peso_medio": {
+            "$avg": "$peso_kg"
+          },
+          "maior_peso": {
+            "$max": "$peso_kg"
+          }
+        }
+      },
+      {
+        "$sort": {
+          "peso_total": -1
+        }
+      },
+      {
+        "$limit": 3
+      },
+      {
+        "$project": {
+          "_id": 0,
+          "terminal": "$_id",
+          "total_movimentacoes": 1,
+          "peso_total": 1,
+          "peso_medio": 1,
+          "maior_peso": 1
+        }
+      }
+    ],
+    "cursor": {},
+    "$db": "logiporto"
+  },
+  "ok": 1
+}
