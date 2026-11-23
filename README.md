@@ -482,6 +482,128 @@ d) Impacto da refatoração
 
 Com o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1 }` e só lê as 99559 movimentações de Granel, em vez das 400 mil. Com isso menos documentos passam pelo pipeline e o `$group` monta 5 grupos em vez de 20, o que diminui o uso de memória RAM, porque cada grupo fica guardado na memória até o fim. Também cai o uso de CPU, já que o banco faz menos comparações e somas. E como o `$sort` vem logo depois do `$group`, ele só ordena 5 itens, e o `$limit` corta no lugar certo. No meu teste o tempo ficou parecido, 103 ms contra 111 ms, e isso tem explicação. Ler 1/4 da coleção pelo índice significa ir buscar cada documento num lugar diferente, enquanto o COLLSCAN lê tudo em sequência, que é rápido quando a coleção cabe na memória. Mesmo assim a versão corrigida lê 75% menos documentos, e essa diferença cresce junto com a coleção. A versão errada sempre vai ler tudo, não importa quantas classes existam.
 
+### Auditoria de índices
+
+Ao terminar as Partes A e B rodei `db.movimentacoes.getIndexes()` para conferir se não ficou nenhum índice de teste sobrando.
+
+![Auditoria](evidencias/B3_auditoria_indices.png)
+
+| Índice | Para que serve |
+|---|---|
+| `_id_` | padrão do MongoDB |
+| `terminal_1_classe_1_peso_kg_-1_ts_1` | A1, painel do pátio pela regra ESR |
+| `posicao_2dsphere` | A2, busca pelo incidente |
+| `tipo_1_terminal_1_container_1` | A4, consulta coberta |
+| `classe_1_ts_1` | B1 e B2, primeiro estágio do pipeline |
+
+O índice do item b da A1 (`terminal, classe, ts, peso_kg`) foi apagado, porque ele só existia para a comparação e o ESR faz o mesmo trabalho melhor. Todos os que ficaram são usados por alguma consulta. Na coleção alertas ficou só o índice TTL da A3, que é o índice correto da política de retenção.
+
+## Parte C - Grafos no Neo4j
+
+### C1. Modelagem
+
+Fiz o diagrama em Mermaid, que o GitHub mostra como desenho direto nesta página.
+
+Modelo do grafo:
+
+```mermaid
+flowchart LR
+    E["<b>:Empresa</b><br/>cnpj: String<br/>nome: String<br/>sancionada: Boolean"]
+    C["<b>:Container</b><br/>id: String<br/>classe: String"]
+    T["<b>:Terminal</b><br/>nome: String"]
+
+    E -- "SOCIA_DE {pct: Integer}" --> E
+    C -- "PERTENCE_A" --> E
+    C -- "PASSOU_POR {data: String}" --> T
+    C -- "EMPILHADO_SOBRE" --> C
+```
+
+Como ler:
+
+- Caixa é um nó. O nome com dois pontos é o rótulo e embaixo vêm as propriedades.
+- Seta é um relacionamento, sempre com direção. O texto da seta é o tipo e, entre chaves, as propriedades dele.
+- `(a)-[:SOCIA_DE {pct}]->(b)` quer dizer que a empresa a é sócia da empresa b, com pct por cento de participação.
+- `(k)-[:PERTENCE_A]->(e)` quer dizer que o contêiner k é da empresa e.
+- `(k)-[:PASSOU_POR {data}]->(t)` quer dizer que o contêiner k passou pelo terminal t naquela data.
+- `(a)-[:EMPILHADO_SOBRE]->(b)` quer dizer que o contêiner a está em cima do contêiner b.
+
+Não tem chave estrangeira nem tabela no meio. A participação societária e a data da passagem ficam guardadas no próprio relacionamento, que é como o grafo trata a ligação entre duas coisas.
+
+Exemplo real do meu grafo, a empresa sancionada E2 e os sócios diretos dela:
+
+```mermaid
+flowchart LR
+    E0["Empresa 0<br/>cnpj: E0"]
+    E9["Empresa 9<br/>cnpj: E9"]
+    E13["Empresa 13<br/>cnpj: E13"]
+    E20["Empresa 20<br/>cnpj: E20"]
+    E2["<b>Empresa 2</b><br/>cnpj: E2<br/>sancionada: true"]
+
+    E0 -- "SOCIA_DE {pct: 44}" --> E2
+    E9 -- "SOCIA_DE {pct: 26}" --> E2
+    E13 -- "SOCIA_DE {pct: 75}" --> E2
+    E20 -- "SOCIA_DE {pct: 93}" --> E2
+
+    style E2 fill:#f8d7da,stroke:#c00
+```
+
+Consulta usada para tirar esses dados do banco:
+
+```cypher
+MATCH (s:Empresa {sancionada: true})-[r:SOCIA_DE]-(socio:Empresa)
+RETURN socio.nome AS socio, r.pct AS pct, startNode(r) = socio AS socio_aponta_para_E2
+```
+
+![C1 socios](evidencias/C1_socios_E2.png)
+
+Todas as 4 setas chegam na E2. Ela não é sócia de ninguém, só tem sócios.
+
+### C2. Investigação societária e operacional
+
+```cypher
+// 1. Empresas que são sócias da sancionada, direto ou por até 3 níveis
+MATCH (x:Empresa)-[:SOCIA_DE*1..3]->(s:Empresa {sancionada: true})
+WITH DISTINCT x, s
+// 2. Contêiner da empresa x e contêiner da sancionada no mesmo terminal
+MATCH (x)<-[:PERTENCE_A]-(kx:Container)-[px:PASSOU_POR]->(t:Terminal)<-[ps:PASSOU_POR]-(ks:Container)-[:PERTENCE_A]->(s)
+// 3. Na mesma data
+WHERE px.data = ps.data AND x <> s
+RETURN DISTINCT x.nome AS empresa, kx.id AS container, t.nome AS terminal, px.data AS data
+ORDER BY empresa, data
+```
+
+![C2 resultado](evidencias/C2a_resultado.png)
+
+| empresa | container | terminal | data |
+|---|---|---|---|
+| Empresa 11 | K66 | T4 | 2026-10-10 |
+| Empresa 17 | K25 | T4 | 2026-10-11 |
+| Empresa 21 | K20 | T1 | 2026-10-02 |
+| Empresa 23 | K13 | T1 | 2026-10-27 |
+| Empresa 9 | K30 | T4 | 2026-10-10 |
+
+Por que a direção é de fora para dentro, chegando na sancionada. No meu grafo a seta `(a)-[:SOCIA_DE]->(b)` significa que a é sócia de b, ou seja, a é dona de uma parte de b. Numa investigação de sanção o que interessa é quem está por trás da empresa sancionada: os sócios dela, os sócios dos sócios e assim por diante. São essas empresas que podem estar usando outras empresas para continuar operando. Então o caminho tem que seguir as setas até chegar na E2.
+
+Para comprovar, rodei o caminho no sentido contrário, saindo da E2:
+
+```cypher
+MATCH (s:Empresa {sancionada: true})-[:SOCIA_DE*1..3]->(x:Empresa)
+RETURN count(DISTINCT x) AS empresas_alcancadas
+```
+
+![C2 direcao contraria](evidencias/C2b_direcao_contraria.png)
+
+Deu 0. A E2 não tem nenhuma seta saindo, então nessa direção não se chega em ninguém.
+
+Também não usei o caminho sem direção. Sem direção a busca mistura quem é dono da E2 com empresas que só têm um sócio em comum com ela, por exemplo uma empresa que recebe investimento da E20. Isso traz empresas sem relação de controle com a sancionada e aumenta muito o número de caminhos.
+
+Outros cuidados da consulta:
+
+- O limite `*1..3` segue o pedido de até 3 níveis e impede que a busca ande pelo grafo inteiro.
+- O `WITH DISTINCT x, s` tira as repetições antes da segunda parte. Uma mesma empresa pode chegar na E2 por mais de um caminho, e sem isso a comparação de contêineres seria feita várias vezes para a mesma empresa.
+- O `RETURN DISTINCT` garante que não vem linha repetida no resultado.
+- O `x <> s` impede que a própria sancionada apareça como investigada.
+
 ## Diário de bordo
 
 - O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
@@ -497,3 +619,5 @@ Com o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1
 - B1: eu tinha previsto uns 49 a 50 mil documentos entrando no $group, e foram 49610. No começo estranhei o nReturned 5 no explain, achei que fosse o número de documentos que entraram. Depois entendi que, nessa versão do MongoDB, o $group roda junto com a busca e o nReturned é a saída do grupo, um por terminal. Confirmei a entrada contando os documentos do $match.
 - B2: previ que o pipeline errado ia trazer 0 ou 1 documento, com peso 0. Veio 1 documento (T2), com peso 0.
 - B2: esperava que o pipeline corrigido também ficasse mais rápido, mas o tempo foi parecido (103 ms contra 111 ms). Entendi que buscar 1/4 dos documentos pelo índice, um por um, custa parecido com ler a coleção inteira em sequência quando tudo está na memória. O ganho real aparece em documentos lidos e em grupos na memória.
+
+- C2: eu tinha previsto a direção chegando na E2, porque no script ela só aparece no campo "para" das sociedades, e o teste no sentido contrário deu 0 como eu esperava. Previ entre 0 e 5 registros e vieram 5.
