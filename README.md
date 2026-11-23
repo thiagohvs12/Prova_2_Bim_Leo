@@ -384,6 +384,104 @@ db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06
 
 Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações para descartar a maioria. Com o índice ele vai direto nas chaves de Granel a partir de junho e só lê os documentos que realmente entram no $group. Nenhuma chave foi lida à toa, porque keys e docs examinados são iguais ao resultado do filtro.
 
+### B2. Debug Arquitetural
+
+a) Rodei o pipeline exatamente como estava na prova:
+
+```js
+const pipelineErrado = [
+  { $project: { terminal: 1, classe: 1 } },
+  { $group: {
+      _id: { terminal: "$terminal", classe: "$classe" },
+      kg_total: { $sum: "peso_kg" },
+      mov: { $sum: 1 }
+  } },
+  { $limit: 3 },
+  { $sort: { kg_total: -1 } },
+  { $match: { "_id.classe": "Granel" } }
+]
+db.movimentacoes.aggregate(pipelineErrado)
+```
+
+![B2 pipeline errado](evidencias/B2a_pipeline_errado.png)
+
+Saída obtida:
+
+![B2 saida errada](evidencias/B2b_saida_errada.png)
+
+```
+[ { _id: { terminal: 'T2', classe: 'Granel' }, kg_total: 0, mov: 20053 } ]
+```
+
+Veio só 1 terminal no lugar de 3, e com peso total 0, o que não faz sentido, já que todo contêiner pesa pelo menos 1000 kg.
+
+![B2 explain errado](evidencias/B2c_explain_errado.png)
+
+O explain mostra que ele leu as 400 mil movimentações (COLLSCAN) e montou 20 grupos, que são todas as combinações de 5 terminais com 4 classes.
+
+b) Defeitos encontrados
+
+| # | Defeito | Tipo |
+|---|---|---|
+| 1 | O `$project` do começo só deixa `terminal` e `classe`. O campo `peso_kg` é jogado fora antes do `$group`, então não tem peso nenhum para somar. | Lógica |
+| 2 | `$sum: "peso_kg"` está sem o `$`. Sem o `$`, o MongoDB entende o texto "peso_kg" e não o valor do campo. Como texto não é número, o `$sum` ignora e o total dá 0. Mesmo arrumando o defeito 1, continuaria dando 0. | Lógica |
+| 3 | O `$limit: 3` vem antes do `$sort`. Ele pega 3 grupos quaisquer, na ordem em que saíram do `$group`, e só depois ordena esses 3. Os 3 maiores podem ter ficado de fora. | Lógica |
+| 4 | O `$match` da classe está no final, depois do `$limit`. Ele filtra só os 3 grupos que sobraram. Se entre eles tiver só 1 de Granel, vem só 1, que foi o que aconteceu. | Lógica |
+| 5 | O mesmo `$match` no final também deixa tudo lento. Como o filtro não está no começo, o banco não consegue usar o índice e lê as 400 mil movimentações, para depois jogar fora 3/4 delas. | Desempenho |
+| 6 | O `$group` agrupa por terminal e classe juntos. Isso cria 20 grupos na memória, sendo que só os 5 de Granel interessam. Com o filtro de classe no começo, basta agrupar por terminal. | Desempenho |
+
+c) Pipeline corrigido
+
+```js
+const pipelineCorrigido = [
+  // Filtra primeiro: usa o índice { classe: 1, ts: 1 } e só Granel segue
+  { $match: { classe: "Granel" } },
+  // Agrupa só por terminal, somando o campo de verdade com $
+  { $group: { _id: "$terminal", kg_total: { $sum: "$peso_kg" }, mov: { $sum: 1 } } },
+  // Ordena antes de cortar
+  { $sort: { kg_total: -1 } },
+  { $limit: 3 },
+  // Saída limpa, com o nome do terminal
+  { $project: { _id: 0, terminal: "$_id", kg_total: 1, mov: 1 } }
+]
+db.movimentacoes.aggregate(pipelineCorrigido)
+```
+
+![B2 pipeline corrigido](evidencias/B2d_pipeline_corrigido.png)
+
+![B2 saida corrigida](evidencias/B2e_saida_corrigida.png)
+
+| terminal | kg_total | mov |
+|---|---|---|
+| T3 | 322809041 | 20156 |
+| T1 | 320790608 | 20007 |
+| T2 | 318513142 | 20053 |
+
+Não precisei criar índice novo. O índice `{ classe: 1, ts: 1 }` da B1 começa por classe, então serve para um filtro só de classe também.
+
+![B2 explain corrigido](evidencias/B2f_explain_corrigido.png)
+
+Para provar que o resultado está certo, rodei o mesmo cálculo sem o `$limit`, mostrando os 5 terminais:
+
+![B2 conferencia](evidencias/B2g_conferencia.png)
+
+T3, T1 e T2 são mesmo os três maiores. T5 e T4 ficam abaixo. O total de movimentações do T4 deu 19545, o mesmo número que aparece no meu Código de Autenticidade (LP-241959542-19545-33562), que o gerador calcula justamente para Granel no T4. Isso confirma que a contagem bate com o banco gerado pelo meu RA.
+
+Outra coisa que dá para ver: no pipeline errado o T2 aparecia com mov 20053, o mesmo valor do corrigido. A contagem estava certa, o problema era só o peso e a ordem dos estágios.
+
+| | errado | corrigido |
+|---|---|---|
+| Estágios | GROUP, COLLSCAN | GROUP, FETCH, IXSCAN |
+| totalKeysExamined | 0 | 99559 |
+| totalDocsExamined | 400000 | 99559 |
+| Grupos montados | 20 | 5 |
+| Resultado | errado, 1 terminal com peso 0 | certo, 3 terminais |
+| executionTimeMillis | 103 | 111 |
+
+d) Impacto da refatoração
+
+Com o `$match` no começo, o MongoDB consegue usar o índice `{ classe: 1, ts: 1 }` e só lê as 99559 movimentações de Granel, em vez das 400 mil. Com isso menos documentos passam pelo pipeline e o `$group` monta 5 grupos em vez de 20, o que diminui o uso de memória RAM, porque cada grupo fica guardado na memória até o fim. Também cai o uso de CPU, já que o banco faz menos comparações e somas. E como o `$sort` vem logo depois do `$group`, ele só ordena 5 itens, e o `$limit` corta no lugar certo. No meu teste o tempo ficou parecido, 103 ms contra 111 ms, e isso tem explicação. Ler 1/4 da coleção pelo índice significa ir buscar cada documento num lugar diferente, enquanto o COLLSCAN lê tudo em sequência, que é rápido quando a coleção cabe na memória. Mesmo assim a versão corrigida lê 75% menos documentos, e essa diferença cresce junto com a coleção. A versão errada sempre vai ler tudo, não importa quantas classes existam.
+
 ## Diário de bordo
 
 - O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
@@ -396,5 +494,6 @@ Deu 49610, o mesmo número. Sem o índice o banco lia as 400 mil movimentações
 - A3: minha hipótese do pré-registro, de que o campo estava gravado como texto, se confirmou. O primeiro sinal foi o findOne mostrar a data entre aspas.
 - A3: o alerta de teste não some na hora. A tarefa do TTL roda a cada 60 segundos, então esperei uns dois minutos antes de contar de novo.
 - A4: a previsão de uns 16 mil registros bateu, foram 15945. O estágio sem o `_id: 0` apareceu como PROJECTION_SIMPLE em vez de só PROJECTION, mas o importante, o FETCH, apareceu como eu esperava.
-
 - B1: eu tinha previsto uns 49 a 50 mil documentos entrando no $group, e foram 49610. No começo estranhei o nReturned 5 no explain, achei que fosse o número de documentos que entraram. Depois entendi que, nessa versão do MongoDB, o $group roda junto com a busca e o nReturned é a saída do grupo, um por terminal. Confirmei a entrada contando os documentos do $match.
+- B2: previ que o pipeline errado ia trazer 0 ou 1 documento, com peso 0. Veio 1 documento (T2), com peso 0.
+- B2: esperava que o pipeline corrigido também ficasse mais rápido, mas o tempo foi parecido (103 ms contra 111 ms). Entendi que buscar 1/4 dos documentos pelo índice, um por um, custa parecido com ler a coleção inteira em sequência quando tudo está na memória. O ganho real aparece em documentos lidos e em grupos na memória.

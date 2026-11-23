@@ -114,3 +114,31 @@ resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineB1)); // 
 db.movimentacoes.createIndex({ classe: 1, ts: 1 });
 resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineB1)); // depois do índice
 db.movimentacoes.countDocuments({ classe: "Granel", ts: { $gte: ISODate("2026-06-01") } }); // 49610 entram no $group
+
+// ---------- B2. Debug arquitetural ----------
+const pipelineErrado = [
+  { $project: { terminal: 1, classe: 1 } },
+  { $group: { _id: { terminal: "$terminal", classe: "$classe" }, kg_total: { $sum: "peso_kg" }, mov: { $sum: 1 } } },
+  { $limit: 3 },
+  { $sort: { kg_total: -1 } },
+  { $match: { "_id.classe": "Granel" } }
+];
+db.movimentacoes.aggregate(pipelineErrado);
+resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineErrado));
+
+const pipelineCorrigido = [
+  { $match: { classe: "Granel" } },
+  { $group: { _id: "$terminal", kg_total: { $sum: "$peso_kg" }, mov: { $sum: 1 } } },
+  { $sort: { kg_total: -1 } },
+  { $limit: 3 },
+  { $project: { _id: 0, terminal: "$_id", kg_total: 1, mov: 1 } }
+];
+db.movimentacoes.aggregate(pipelineCorrigido);
+resumoAgg(db.movimentacoes.explain("executionStats").aggregate(pipelineCorrigido));
+
+// Conferência: os 5 terminais de Granel, sem limit
+db.movimentacoes.aggregate([
+  { $match: { classe: "Granel" } },
+  { $group: { _id: "$terminal", kg_total: { $sum: "$peso_kg" }, mov: { $sum: 1 } } },
+  { $sort: { kg_total: -1 } }
+]);
