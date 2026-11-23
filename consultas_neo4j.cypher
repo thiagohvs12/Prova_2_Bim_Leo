@@ -17,3 +17,24 @@ ORDER BY empresa, data;
 // Direção contrária: saindo da sancionada não se chega em ninguém
 MATCH (s:Empresa {sancionada: true})-[:SOCIA_DE*1..3]->(x:Empresa)
 RETURN count(DISTINCT x) AS empresas_alcancadas;
+
+// ---------- C3. Debug Cypher ----------
+// (i) Corrigido: encontra as empresas existentes e cria a ligação só se não existir
+MATCH (a:Empresa {cnpj:'E1'}), (b:Empresa {cnpj:'E2'})
+MERGE (a)-[r:SOCIA_DE]->(b)
+ON CREATE SET r.pct = 30
+RETURN a.nome, r.pct, b.nome;
+// Limpeza das cópias criadas pelo CREATE com defeito
+// MATCH (e:Empresa) WHERE e.nome IS NULL DETACH DELETE e;
+
+// (ii) Corrigido: com direção, limite de 3 níveis e DISTINCT
+MATCH (x:Empresa)-[:SOCIA_DE*1..3]->(s:Empresa {sancionada:true})
+RETURN DISTINCT x.nome ORDER BY x.nome;
+
+// (iii) Corrigido: a seta aponta de cima para baixo, então busca quem aponta para a base
+MATCH (base:Container {id:'K8'})<-[:EMPILHADO_SOBRE*1..3]-(x:Container)
+RETURN x.id ORDER BY x.id;
+
+// (iv) Corrigido: conta contêineres diferentes, não passagens
+MATCH (k:Container)-[:PASSOU_POR]->(t:Terminal) WHERE k.classe = 'Perigoso'
+RETURN t.nome, count(DISTINCT k) ORDER BY t.nome;

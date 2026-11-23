@@ -604,6 +604,152 @@ Outros cuidados da consulta:
 - O `RETURN DISTINCT` garante que não vem linha repetida no resultado.
 - O `x <> s` impede que a própria sancionada apareça como investigada.
 
+### C3. Debug Cypher
+
+Rodei esta questão depois de terminar a C1 e a C2.
+
+#### Trecho (i). Registrar que E1 é sócia de E2
+
+```cypher
+CREATE (a:Empresa {cnpj:'E1'})-[:SOCIA_DE {pct:30}]->(b:Empresa {cnpj:'E2'})
+```
+
+Sintoma. Antes de rodar havia 30 empresas.
+
+![C3 i antes](evidencias/C3i_a_contagem_antes.png)
+
+O Neo4j respondeu "Created 2 nodes", quando o certo seria não criar nenhuma empresa, só a ligação.
+
+![C3 i create](evidencias/C3i_b_create.png)
+
+Procurando E1 e E2 aparecem as originais, com nome, e cópias sem nome e sem a informação de sancionada. Sem querer eu rodei o comando duas vezes, por isso vieram 2 cópias de cada.
+
+![C3 i duplicadas](evidencias/C3i_c_duplicadas.png)
+
+Causa raiz. O `CREATE` sempre cria tudo o que está escrito no padrão, nós e relacionamento. Escrever `(a:Empresa {cnpj:'E1'})` dentro de um `CREATE` não procura a empresa que já existe, cria uma nova com esse cnpj. A ligação foi feita entre duas empresas novas e vazias, e as empresas de verdade continuaram sem a ligação. Cada vez que o comando roda, cria mais duas cópias.
+
+Limpeza das cópias, conforme a prova pede antes de rodar a correção:
+
+```cypher
+MATCH (e:Empresa) WHERE e.nome IS NULL DETACH DELETE e
+```
+
+![C3 i limpeza](evidencias/C3i_d_limpeza.png)
+
+Apagou as 4 cópias e as 2 ligações falsas.
+
+Código corrigido:
+
+```cypher
+MATCH (a:Empresa {cnpj:'E1'}), (b:Empresa {cnpj:'E2'})
+MERGE (a)-[r:SOCIA_DE]->(b)
+ON CREATE SET r.pct = 30
+RETURN a.nome, r.pct, b.nome
+```
+
+Primeiro o `MATCH` encontra as duas empresas que já existem. Depois o `MERGE` cria a ligação só se ela ainda não existir. Se o comando rodar de novo, não duplica nada. O `ON CREATE SET` coloca o pct só quando a ligação é criada.
+
+![C3 i merge](evidencias/C3i_e_merge.png)
+
+Evidência. Criou só 1 relacionamento, entre Empresa 1 e Empresa 2, e o total voltou a ser 30 empresas.
+
+![C3 i depois](evidencias/C3i_f_contagem_depois.png)
+
+O Neo4j mostrou um aviso de "produto cartesiano" porque o `MATCH` tem dois padrões separados. Aqui não tem problema, já que cada um encontra uma empresa só, 1 x 1 = 1 combinação. Para evitar cópias de vez, o ideal seria também criar uma regra de cnpj único com `CREATE CONSTRAINT FOR (e:Empresa) REQUIRE e.cnpj IS UNIQUE`. Aí um `CREATE` errado daria erro em vez de duplicar.
+
+Essa nova ligação E1 para E2 não muda o resultado da C2. A Empresa 1 já estava na lista, chegando na E2 por outro caminho, e nenhuma empresa nova passa a ficar a 3 níveis ou menos da E2.
+
+#### Trecho (ii). Empresas ligadas à sancionada
+
+```cypher
+MATCH (s:Empresa {sancionada:true})-[:SOCIA_DE*]-(x:Empresa) RETURN x.nome
+```
+
+Sintoma. Rodei com `LIMIT 20`, como a prova orienta, para não travar o Neo4j:
+
+![C3 ii sintoma 1](evidencias/C3ii_a_sintoma_parte1.png)
+
+![C3 ii sintoma 2](evidencias/C3ii_a_sintoma_parte2.png)
+
+Em só 20 linhas já tem empresa repetida, como Empresa 8, Empresa 19 e Empresa 20, e aparece até a Empresa 2, que é a própria sancionada.
+
+Causa raiz. São três problemas juntos:
+
+- `*` sem limite. O Neo4j tenta seguir caminhos de qualquer tamanho.
+- Sem direção, com `-` no lugar de `->`. Cada ligação pode ser percorrida para os dois lados, então ele anda pelo grafo inteiro, de sócio para investida e de volta.
+- Sem `DISTINCT`. O Neo4j devolve uma linha para cada caminho encontrado, não para cada empresa. A mesma empresa aparece uma vez para cada caminho diferente que chega nela, e caminhos que dão a volta trazem a própria E2.
+
+Com 30 empresas e 45 ligações, o número de caminhos possíveis cresce muito rápido. Por isso, sem o LIMIT, a consulta pode consumir muita memória e travar.
+
+Código corrigido:
+
+```cypher
+MATCH (x:Empresa)-[:SOCIA_DE*1..3]->(s:Empresa {sancionada:true})
+RETURN DISTINCT x.nome ORDER BY x.nome
+```
+
+![C3 ii corrigida](evidencias/C3ii_b_corrigida.png)
+
+Evidência. Voltaram 12 empresas, sem repetição e sem a E2: Empresa 0, 1, 3, 4, 6, 9, 11, 13, 17, 20, 21 e 23. São as mesmas empresas que a primeira parte da C2 usa. A direção chegando na E2 está justificada na C2.
+
+#### Trecho (iii). Contêineres presos em cima da base
+
+```cypher
+MATCH (base:Container {id:'K8'})-[:EMPILHADO_SOBRE*1..3]->(x:Container) RETURN x.id
+```
+
+Troquei 'BASE_DA_PILHA' pela minha base, K8.
+
+Sintoma. Não voltou nada, "No changes, no records".
+
+![C3 iii antes](evidencias/C3iii_a_antes.png)
+
+Causa raiz. A seta está ao contrário. No grafo, `(a)-[:EMPILHADO_SOBRE]->(b)` quer dizer que a está em cima de b, então a seta sai do contêiner de cima e aponta para o de baixo. O K8 é a base da pilha, não está em cima de ninguém, por isso não sai nenhuma seta dele. A consulta procurava o que está embaixo da base, e embaixo da base não tem nada.
+
+Código corrigido, invertendo a seta para buscar quem aponta para a base:
+
+```cypher
+MATCH (base:Container {id:'K8'})<-[:EMPILHADO_SOBRE*1..3]-(x:Container)
+RETURN x.id ORDER BY x.id
+```
+
+![C3 iii corrigida](evidencias/C3iii_b_corrigida.png)
+
+Evidência. Voltaram K9, K10 e K11. O K9 está direto em cima do K8, o K10 em cima do K9 e o K11 em cima do K10. Se o K8 for retirado, os três ficam presos.
+
+#### Trecho (iv). Contêineres perigosos distintos por terminal
+
+```cypher
+MATCH (k:Container)-[:PASSOU_POR]->(t:Terminal) WHERE k.classe = 'Perigoso' RETURN t.nome, count(k)
+```
+
+Sintoma. Os números vêm maiores do que deveriam.
+
+![C3 iv antes](evidencias/C3iv_a_antes.png)
+
+Causa raiz. O `MATCH` devolve uma linha para cada passagem, ou seja, para cada relacionamento PASSOU_POR, e o `count(k)` conta linhas. Cada contêiner tem 2 passagens, e às vezes as duas foram no mesmo terminal, em datas diferentes. Nesse caso o mesmo contêiner aparece em 2 linhas daquele terminal e é contado 2 vezes. A pergunta é quantos contêineres diferentes, e não quantas passagens.
+
+Código corrigido:
+
+```cypher
+MATCH (k:Container)-[:PASSOU_POR]->(t:Terminal) WHERE k.classe = 'Perigoso'
+RETURN t.nome, count(DISTINCT k) ORDER BY t.nome
+```
+
+![C3 iv corrigida](evidencias/C3iv_b_corrigida.png)
+
+Evidência
+
+| terminal | count(k), antes | count(DISTINCT k), depois |
+|---|---|---|
+| T1 | 12 | 10 |
+| T2 | 14 | 13 |
+| T3 | 6 | 6 |
+| T4 | 8 | 8 |
+| T5 | 10 | 9 |
+
+T1, T2 e T5 tinham contêineres perigosos contados duas vezes. No T1, por exemplo, o K14 passou duas vezes (dias 09 e 19 de outubro) e o K73 também (dias 13 e 14). T3 e T4 não mudaram porque nenhum contêiner perigoso passou duas vezes por eles.
+
 ## Diário de bordo
 
 - O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
@@ -619,5 +765,6 @@ Outros cuidados da consulta:
 - B1: eu tinha previsto uns 49 a 50 mil documentos entrando no $group, e foram 49610. No começo estranhei o nReturned 5 no explain, achei que fosse o número de documentos que entraram. Depois entendi que, nessa versão do MongoDB, o $group roda junto com a busca e o nReturned é a saída do grupo, um por terminal. Confirmei a entrada contando os documentos do $match.
 - B2: previ que o pipeline errado ia trazer 0 ou 1 documento, com peso 0. Veio 1 documento (T2), com peso 0.
 - B2: esperava que o pipeline corrigido também ficasse mais rápido, mas o tempo foi parecido (103 ms contra 111 ms). Entendi que buscar 1/4 dos documentos pelo índice, um por um, custa parecido com ler a coleção inteira em sequência quando tudo está na memória. O ganho real aparece em documentos lidos e em grupos na memória.
-
 - C2: eu tinha previsto a direção chegando na E2, porque no script ela só aparece no campo "para" das sociedades, e o teste no sentido contrário deu 0 como eu esperava. Previ entre 0 e 5 registros e vieram 5.
+- C3 (i): rodei o CREATE com defeito duas vezes sem perceber e acabaram sendo criadas 4 empresas falsas em vez de 2. Isso acabou mostrando bem o problema, porque cada execução duplica de novo. Apaguei as 4 com o DETACH DELETE antes de rodar a versão com MERGE.
+- C3 (ii): no print grande do Neo4j os resultados ficaram empilhados e repetidos, então recortei só a parte de cada consulta para as evidências.
