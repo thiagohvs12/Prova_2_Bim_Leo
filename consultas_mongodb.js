@@ -68,3 +68,14 @@ db.movimentacoes.find(
 ).limit(10);
 
 resumo(db.movimentacoes.find({ posicao: { $near: { $geometry: pontoIncidente, $maxDistance: 300 } } }).limit(10).explain("executionStats"));
+
+// ---------- A3. O TTL que não apaga ----------
+db.alertas.findOne();   // registrado_em aparece entre aspas: é texto
+db.alertas.createIndex({ registrado_em: 1 }, { expireAfterSeconds: 2592000 }); // 30 dias
+db.alertas.countDocuments();                                  // 100000 antes e depois de esperar
+db.alertas.countDocuments({ registrado_em: { $type: "string" } }); // 100000
+db.alertas.countDocuments({ registrado_em: { $type: "date" } });   // 0
+
+// Como a aplicação deve gravar: data de verdade (Date), não texto
+db.alertas.insertOne({ sensor: "TESTE", nivel: "info", registrado_em: new Date(Date.now() - 40*24*60*60*1000) });
+db.alertas.countDocuments({ sensor: "TESTE" }); // 1 logo depois, 0 depois de ~2 minutos

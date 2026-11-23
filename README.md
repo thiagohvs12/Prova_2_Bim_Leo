@@ -193,6 +193,74 @@ LIMIT. Corta em 10. Como os resultados já chegam em ordem, quando completa 10 a
 
 No fim o banco leu 36 documentos para responder, em vez das 400 mil movimentações.
 
+### A3. O TTL que não apaga
+
+Primeiro olhei como um alerta está gravado:
+
+```js
+db.alertas.findOne()
+```
+
+![A3 findOne](evidencias/A3a_findOne.png)
+
+O campo `registrado_em` aparece entre aspas: `'2026-07-05T19:49:33.047Z'`. Isso quer dizer que a data foi gravada como texto, e não como data.
+
+Depois criei o mesmo índice TTL que o desenvolvedor anterior criou, para apagar depois de 30 dias (30 x 24 x 60 x 60 = 2592000 segundos):
+
+```js
+db.alertas.createIndex({ registrado_em: 1 }, { expireAfterSeconds: 2592000 })
+```
+
+![A3 indice](evidencias/A3b_indice_ttl.png)
+
+Contei os alertas logo depois e de novo alguns minutos mais tarde. Continuaram 100000, mesmo todos sendo de 2026 e quase todos com bem mais de 30 dias.
+
+![A3 antes](evidencias/A3c_contagem_antes.png)
+
+![A3 depois](evidencias/A3d_contagem_depois.png)
+
+Para comprovar o motivo, contei os alertas pelo tipo do campo:
+
+```js
+db.alertas.countDocuments({ registrado_em: { $type: "string" } })
+db.alertas.countDocuments({ registrado_em: { $type: "date" } })
+```
+
+![A3 string](evidencias/A3e_tipo_string.png)
+
+![A3 date](evidencias/A3f_tipo_date.png)
+
+Todos os 100000 estão como texto e nenhum está como data.
+
+Causa raiz. O MongoDB tem uma tarefa que roda sozinha a cada 60 segundos e apaga os documentos vencidos de um índice TTL. Para saber se um documento venceu, ela soma a data do campo com o `expireAfterSeconds` e compara com a hora atual. Essa conta só é feita quando o campo é do tipo Date, ou uma lista de Dates. Se o campo for texto, a tarefa simplesmente ignora o documento, sem dar erro nenhum. Mesmo o texto tendo cara de data, para o banco ele é só um texto. Por isso o índice foi criado sem problema e nada foi apagado.
+
+O comando do índice em si está certo. O que precisa mudar é o jeito de gravar. O índice correto é:
+
+```js
+db.alertas.createIndex({ registrado_em: 1 }, { expireAfterSeconds: 2592000 })
+```
+
+E a aplicação precisa gravar `registrado_em` como data de verdade, usando `new Date()` ou o tipo de data do driver da linguagem, e não como texto com `toISOString()`:
+
+```js
+db.alertas.insertOne({ sensor: "S1", nivel: "aviso", registrado_em: new Date() })
+```
+
+Para testar, gravei um alerta do jeito certo com data de 40 dias atrás:
+
+```js
+db.alertas.insertOne({ sensor: "TESTE", nivel: "info", registrado_em: new Date(Date.now() - 40*24*60*60*1000) })
+db.alertas.countDocuments({ sensor: "TESTE" })
+```
+
+![A3 insert](evidencias/A3g_insert_teste.png)
+
+![A3 teste antes](evidencias/A3h_teste_antes.png)
+
+Logo depois de gravar a contagem era 1. Uns dois minutos depois rodei de novo e deu 0. O TTL apagou o alerta gravado como data e continuou ignorando os 100000 gravados como texto.
+
+![A3 teste depois](evidencias/A3i_teste_depois.png)
+
 ## Diário de bordo
 
 - O primeiro comando do gerador falhou porque o contêiner mongo-lab estava parado. Resolvi com `docker start mongo-lab`.
@@ -202,3 +270,5 @@ No fim o banco leu 36 documentos para responder, em vez das 400 mil movimentaç�
 - A1 b: eu tinha previsto uns 9,7 mil documentos lidos, mas foram só 20. As chaves bateram, 9741. Eu não tinha pensado que, como o peso está no índice, o banco ordena pelas chaves e só busca os documentos no final.
 - A2: com as coordenadas na ordem do Google Maps o terminal não mostrou nada, e parecia que o comando nem tinha rodado. Repeti com `.toArray()` para aparecer o `[]`.
 - A2: eu tinha previsto centenas de chaves e documentos lidos. Foram 102 chaves e 36 documentos, porque a busca para assim que acha os 10 mais perto, e eles estavam a poucos metros do ponto.
+- A3: minha hipótese do pré-registro, de que o campo estava gravado como texto, se confirmou. O primeiro sinal foi o findOne mostrar a data entre aspas.
+- A3: o alerta de teste não some na hora. A tarefa do TTL roda a cada 60 segundos, então esperei uns dois minutos antes de contar de novo.
